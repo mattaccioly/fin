@@ -1,11 +1,22 @@
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
+import { DEFAULT_CURRENCY, type CurrencyCode } from "@/lib/currencies";
 
-export function formatCurrency(value: number | string | null | undefined): string {
+const currencyFormatters = new Map<CurrencyCode, Intl.NumberFormat>();
+
+function currencyFormatter(currency: CurrencyCode): Intl.NumberFormat {
+  let formatter = currencyFormatters.get(currency);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency });
+    currencyFormatters.set(currency, formatter);
+  }
+  return formatter;
+}
+
+export function formatCurrency(
+  value: number | string | null | undefined,
+  currency: CurrencyCode = DEFAULT_CURRENCY,
+): string {
   const n = typeof value === "string" ? Number(value) : (value ?? 0);
-  return currencyFormatter.format(Number.isFinite(n) ? n : 0);
+  return currencyFormatter(currency).format(Number.isFinite(n) ? n : 0);
 }
 
 export function formatDateBR(date: string | Date): string {

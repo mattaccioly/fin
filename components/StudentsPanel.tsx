@@ -7,8 +7,9 @@ import { Input, Label, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
+import { useCurrency } from "@/components/CurrencyProvider";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency, parseAmountInput } from "@/lib/format";
+import { parseAmountInput } from "@/lib/format";
 import {
   BILLING_MODE_LABELS,
   type BillingMode,
@@ -17,6 +18,7 @@ import {
 
 export function StudentsPanel() {
   const supabase = useMemo(() => createClient(), []);
+  const { format } = useCurrency();
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +104,7 @@ export function StudentsPanel() {
       align: "right",
       sortValue: (r) => Number(r.default_rate),
       render: (r) => (
-        <span className="tabular-nums">{formatCurrency(r.default_rate)}</span>
+        <span className="tabular-nums">{format(r.default_rate)}</span>
       ),
     },
     {
@@ -187,7 +189,7 @@ export function StudentsPanel() {
                     ) : null}
                   </p>
                   <p className="text-xs text-[var(--fg-muted)]">
-                    {BILLING_MODE_LABELS[s.billing_mode]} · {formatCurrency(s.default_rate)}
+                    {BILLING_MODE_LABELS[s.billing_mode]} · {format(s.default_rate)}
                     {s.financial_guardian ? ` · ${s.financial_guardian}` : ""}
                   </p>
                 </div>

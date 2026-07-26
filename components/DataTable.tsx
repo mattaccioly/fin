@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 
 export type Column<T> = {
   key: string;
-  header: string;
+  header: ReactNode;
   align?: "left" | "right";
   /** When provided, the column header becomes clickable for sorting. */
   sortValue?: (row: T) => string | number;

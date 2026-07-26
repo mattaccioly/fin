@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AppToaster } from "@/components/AppToaster";
+import { CurrencyProvider } from "@/components/CurrencyProvider";
 import { ThemeProvider, themeInitScript } from "@/components/ThemeProvider";
 import "./globals.css";
 
@@ -26,8 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          {children}
-          <AppToaster />
+          <CurrencyProvider>
+            {children}
+            <AppToaster />
+          </CurrencyProvider>
         </ThemeProvider>
       </body>
     </html>

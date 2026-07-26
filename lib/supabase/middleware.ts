@@ -29,7 +29,9 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isLogin = path === "/login";
-  const isPublic = isLogin;
+  // API routes answer with JSON status codes instead of a redirect to the login page.
+  const isApi = path.startsWith("/api/");
+  const isPublic = isLogin || isApi;
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

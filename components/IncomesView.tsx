@@ -1,17 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { Amount, TotalAmount } from "@/components/Amount";
+import { CurrencySelect } from "@/components/CurrencySelect";
+import { useCurrency, useRowRates } from "@/components/CurrencyProvider";
 import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { createClient } from "@/lib/supabase/client";
+import { toCurrencyCode, type CurrencyCode } from "@/lib/currencies";
 import { onDataChanged } from "@/lib/events";
-import { formatCurrency, formatDateBR, parseAmountInput, toISODate } from "@/lib/format";
+import { formatDateBR, parseAmountInput, toISODate } from "@/lib/format";
 import { INCOME_SOURCE_LABELS, type Income, type IncomeSource } from "@/lib/types";
 
 export function IncomesView() {
@@ -22,6 +26,8 @@ export function IncomesView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Income | null>(null);
   const [repeating, setRepeating] = useState(false);
+
+  useRowRates(items);
 
   const load = useCallback(
     async (uid: string) => {
@@ -83,6 +89,7 @@ export function IncomesView() {
     const rows = data.map((i) => ({
       user_id: userId,
       amount: i.amount,
+      currency: i.currency,
       source: i.source,
       description: i.description,
       is_recurring: true,
@@ -124,8 +131,6 @@ export function IncomesView() {
     setFormOpen(false);
     setEditing(null);
   }
-
-  const total = items.reduce((s, i) => s + Number(i.amount), 0);
 
   const columns: Column<Income>[] = [
     {
@@ -171,9 +176,12 @@ export function IncomesView() {
       align: "right",
       sortValue: (r) => Number(r.amount),
       render: (r) => (
-        <span className="whitespace-nowrap font-semibold tabular-nums text-[var(--positive)]">
-          {formatCurrency(r.amount)}
-        </span>
+        <Amount
+          value={r.amount}
+          currency={r.currency}
+          date={r.date}
+          className="whitespace-nowrap font-semibold tabular-nums text-[var(--positive)]"
+        />
       ),
     },
     {
@@ -236,7 +244,7 @@ export function IncomesView() {
               initialSort={{ key: "date", dir: "desc" }}
               footer={{
                 date: `${items.length} entrada(s)`,
-                amount: formatCurrency(total),
+                amount: <TotalAmount rows={items} />,
               }}
             />
           </div>
@@ -254,9 +262,12 @@ export function IncomesView() {
                     {item.description ? ` · ${item.description}` : ""}
                   </p>
                 </div>
-                <p className="tabular-nums text-sm font-semibold text-[var(--positive)]">
-                  {formatCurrency(item.amount)}
-                </p>
+                <Amount
+                  value={item.amount}
+                  currency={item.currency}
+                  date={item.date}
+                  className="text-right tabular-nums text-sm font-semibold text-[var(--positive)]"
+                />
                 {item.source === "teaching" ? (
                   <Link
                     href={`/aulas?income=${item.id}`}
@@ -316,7 +327,10 @@ function IncomeForm({
   onSaved: () => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const { mainCurrency } = useCurrency();
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyCode>(mainCurrency);
+  const currencyTouched = useRef(false);
   const [source, setSource] = useState<IncomeSource>("salary");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(toISODate());
@@ -324,13 +338,19 @@ function IncomeForm({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (editing || currencyTouched.current) return;
+    setCurrency(mainCurrency);
+  }, [mainCurrency, editing]);
+
+  useEffect(() => {
     if (!editing) return;
     setAmount(String(editing.amount).replace(".", ","));
+    setCurrency(toCurrencyCode(editing.currency, mainCurrency));
     setSource(editing.source);
     setDescription(editing.description ?? "");
     setDate(editing.date);
     setIsRecurring(editing.is_recurring);
-  }, [editing]);
+  }, [editing, mainCurrency]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -344,6 +364,7 @@ function IncomeForm({
     const payload = {
       user_id: userId,
       amount: value,
+      currency,
       source,
       description: description.trim() || null,
       date,
@@ -363,16 +384,31 @@ function IncomeForm({
 
   return (
     <form onSubmit={handleSave} className="space-y-3">
-      <div>
-        <Label htmlFor="inc-amount">Valor</Label>
-        <Input
-          id="inc-amount"
-          inputMode="decimal"
-          placeholder="0,00"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          required
-        />
+      <div className="grid grid-cols-[1fr_auto] gap-3">
+        <div>
+          <Label htmlFor="inc-amount">Valor</Label>
+          <Input
+            id="inc-amount"
+            inputMode="decimal"
+            placeholder="0,00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="inc-currency">Moeda</Label>
+          <CurrencySelect
+            id="inc-currency"
+            codeOnly
+            value={currency}
+            onChange={(next) => {
+              currencyTouched.current = true;
+              setCurrency(next);
+            }}
+            className="w-24"
+          />
+        </div>
       </div>
       <div>
         <Label htmlFor="inc-source">Fonte</Label>

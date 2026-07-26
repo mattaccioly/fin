@@ -1,21 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { Amount, TotalAmount } from "@/components/Amount";
+import { CurrencySelect } from "@/components/CurrencySelect";
+import { useCurrency, useRowRates } from "@/components/CurrencyProvider";
 import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { createClient } from "@/lib/supabase/client";
-import {
-  formatCurrency,
-  formatDateBR,
-  monthRange,
-  parseAmountInput,
-  toISODate,
-} from "@/lib/format";
+import { toCurrencyCode, type CurrencyCode } from "@/lib/currencies";
+import type { AmountRow } from "@/lib/fx";
+import { formatDateBR, monthRange, parseAmountInput, toISODate } from "@/lib/format";
 import type { Investment, Project } from "@/lib/types";
 
 type InvestmentRow = Investment & {
@@ -27,11 +26,13 @@ export function InvestmentsView() {
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<InvestmentRow[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [monthTotal, setMonthTotal] = useState(0);
-  const [lifetime, setLifetime] = useState(0);
+  const [monthRows, setMonthRows] = useState<AmountRow[]>([]);
+  const [lifetimeRows, setLifetimeRows] = useState<AmountRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<InvestmentRow | null>(null);
+
+  useRowRates(lifetimeRows);
 
   const load = useCallback(
     async (uid: string) => {
@@ -47,11 +48,11 @@ export function InvestmentsView() {
             .limit(100),
           supabase
             .from("investments")
-            .select("amount")
+            .select("amount, currency, date")
             .eq("user_id", uid)
             .gte("date", start)
             .lte("date", end),
-          supabase.from("investments").select("amount").eq("user_id", uid),
+          supabase.from("investments").select("amount, currency, date").eq("user_id", uid),
           supabase
             .from("projects")
             .select("*")
@@ -60,8 +61,8 @@ export function InvestmentsView() {
             .order("name"),
         ]);
       setItems((data as InvestmentRow[]) ?? []);
-      setMonthTotal((monthData ?? []).reduce((s, i) => s + Number(i.amount), 0));
-      setLifetime((allData ?? []).reduce((s, i) => s + Number(i.amount), 0));
+      setMonthRows((monthData as AmountRow[]) ?? []);
+      setLifetimeRows((allData as AmountRow[]) ?? []);
       setProjects((projs as Project[]) ?? []);
       setLoading(false);
     },
@@ -100,8 +101,6 @@ export function InvestmentsView() {
     setFormOpen(false);
     setEditing(null);
   }
-
-  const listTotal = items.reduce((s, i) => s + Number(i.amount), 0);
 
   const columns: Column<InvestmentRow>[] = [
     {
@@ -147,9 +146,12 @@ export function InvestmentsView() {
       align: "right",
       sortValue: (r) => Number(r.amount),
       render: (r) => (
-        <span className="whitespace-nowrap font-semibold tabular-nums text-sky-400">
-          {formatCurrency(r.amount)}
-        </span>
+        <Amount
+          value={r.amount}
+          currency={r.currency}
+          date={r.date}
+          className="whitespace-nowrap font-semibold tabular-nums text-sky-400"
+        />
       ),
     },
     {
@@ -186,15 +188,17 @@ export function InvestmentsView() {
       <div className="grid grid-cols-2 gap-3 lg:max-w-md lg:gap-4">
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
           <p className="text-xs text-[var(--fg-muted)]">Este mês</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--fg)]">
-            {formatCurrency(monthTotal)}
-          </p>
+          <TotalAmount
+            rows={monthRows}
+            className="mt-1 block text-lg font-semibold tabular-nums text-[var(--fg)]"
+          />
         </div>
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
           <p className="text-xs text-[var(--fg-muted)]">Acumulado</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--fg)]">
-            {formatCurrency(lifetime)}
-          </p>
+          <TotalAmount
+            rows={lifetimeRows}
+            className="mt-1 block text-lg font-semibold tabular-nums text-[var(--fg)]"
+          />
         </div>
       </div>
 
@@ -213,7 +217,7 @@ export function InvestmentsView() {
               initialSort={{ key: "date", dir: "desc" }}
               footer={{
                 date: `${items.length} aporte(s)`,
-                amount: formatCurrency(listTotal),
+                amount: <TotalAmount rows={items} />,
               }}
             />
           </div>
@@ -229,9 +233,12 @@ export function InvestmentsView() {
                     {item.projects ? ` · ${item.projects.emoji} ${item.projects.name}` : ""}
                   </p>
                 </div>
-                <p className="tabular-nums text-sm font-semibold text-sky-400">
-                  {formatCurrency(item.amount)}
-                </p>
+                <Amount
+                  value={item.amount}
+                  currency={item.currency}
+                  date={item.date}
+                  className="text-right tabular-nums text-sm font-semibold text-sky-400"
+                />
                 <button
                   type="button"
                   className="rounded-lg px-2 py-1 text-xs text-[var(--fg-muted)] hover:bg-[var(--surface-2)]"
@@ -283,7 +290,10 @@ function InvestmentForm({
   onSaved: () => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const { mainCurrency } = useCurrency();
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyCode>(mainCurrency);
+  const currencyTouched = useRef(false);
   const [vehicle, setVehicle] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(toISODate());
@@ -291,13 +301,19 @@ function InvestmentForm({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (editing || currencyTouched.current) return;
+    setCurrency(mainCurrency);
+  }, [mainCurrency, editing]);
+
+  useEffect(() => {
     if (!editing) return;
     setAmount(String(editing.amount).replace(".", ","));
+    setCurrency(toCurrencyCode(editing.currency, mainCurrency));
     setVehicle(editing.vehicle);
     setDescription(editing.description ?? "");
     setDate(editing.date);
     setProjectId(editing.project_id ?? "");
-  }, [editing]);
+  }, [editing, mainCurrency]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -311,6 +327,7 @@ function InvestmentForm({
     const payload = {
       user_id: userId,
       amount: value,
+      currency,
       vehicle: vehicle.trim(),
       description: description.trim() || null,
       date,
@@ -330,16 +347,31 @@ function InvestmentForm({
 
   return (
     <form onSubmit={handleSave} className="space-y-3">
-      <div>
-        <Label htmlFor="inv-amount">Valor</Label>
-        <Input
-          id="inv-amount"
-          inputMode="decimal"
-          placeholder="0,00"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          required
-        />
+      <div className="grid grid-cols-[1fr_auto] gap-3">
+        <div>
+          <Label htmlFor="inv-amount">Valor</Label>
+          <Input
+            id="inv-amount"
+            inputMode="decimal"
+            placeholder="0,00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="inv-currency">Moeda</Label>
+          <CurrencySelect
+            id="inv-currency"
+            codeOnly
+            value={currency}
+            onChange={(next) => {
+              currencyTouched.current = true;
+              setCurrency(next);
+            }}
+            className="w-24"
+          />
+        </div>
       </div>
       <div>
         <Label htmlFor="inv-vehicle">Veículo</Label>

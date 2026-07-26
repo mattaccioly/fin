@@ -1,5 +1,15 @@
-import type { Category, Debt, Expense, FixedCost, Income, Investment } from "@/lib/types";
+import type {
+  Category,
+  CreditCardBill,
+  Debt,
+  Expense,
+  FixedCost,
+  Income,
+  Investment,
+} from "@/lib/types";
+import type { CurrencyCode } from "@/lib/currencies";
 import { committedInstallments } from "@/lib/debts";
+import { convertAmount, sumConverted, type RateMap } from "@/lib/fx";
 import { percentChange } from "@/lib/format";
 
 export type MonthSummary = {
@@ -8,13 +18,25 @@ export type MonthSummary = {
   variableExpenses: number;
   fixedCosts: number;
   installments: number;
+  creditBills: number;
   invested: number;
   committed: number;
   outflows: number;
   balance: number;
   byCategory: { category: Category; total: number }[];
+  /** Entries left out of the totals because their rate is still missing. */
+  missingRates: number;
 };
 
+/**
+ * Every total is expressed in `mainCurrency`. Dated entries are converted with the
+ * rate of their own date; fixed costs, installments and card bills are already in
+ * the main currency.
+ *
+ * Credit expenses count for category tracking only — the manual card bill is the
+ * real cash outflow, so credit-method expenses are excluded from `outflows` to
+ * avoid double counting.
+ */
 export function summarizeMonth(params: {
   year: number;
   month: number;
@@ -22,26 +44,53 @@ export function summarizeMonth(params: {
   expenses: Expense[];
   fixedCosts: FixedCost[];
   debts: Debt[];
+  creditCardBills: CreditCardBill[];
   investments: Investment[];
   categories: Category[];
+  mainCurrency: CurrencyCode;
+  rates: RateMap;
 }): MonthSummary {
-  const { year, month, incomes, expenses, fixedCosts, debts, investments, categories } = params;
+  const {
+    year,
+    month,
+    incomes,
+    expenses,
+    fixedCosts,
+    debts,
+    creditCardBills,
+    investments,
+    categories,
+    mainCurrency,
+    rates,
+  } = params;
 
-  const incomeTotal = incomes.reduce((s, i) => s + Number(i.amount), 0);
-  const teachingIncomes = incomes
-    .filter((i) => i.source === "teaching")
-    .reduce((s, i) => s + Number(i.amount), 0);
-  const variable = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const incomeTotal = sumConverted(incomes, mainCurrency, rates);
+  const teaching = sumConverted(
+    incomes.filter((i) => i.source === "teaching"),
+    mainCurrency,
+    rates,
+  );
+  const variable = sumConverted(expenses, mainCurrency, rates);
+  const cashVariable = sumConverted(
+    expenses.filter((e) => e.payment_method !== "credit"),
+    mainCurrency,
+    rates,
+  );
+  const investedTotal = sumConverted(investments, mainCurrency, rates);
   const fixed = fixedCosts.filter((f) => f.active).reduce((s, f) => s + Number(f.amount), 0);
   const installments = committedInstallments(debts, year, month);
-  const invested = investments.reduce((s, i) => s + Number(i.amount), 0);
-  const committed = fixed + installments;
-  const outflows = fixed + installments + variable;
+  const creditBills = creditCardBills
+    .filter((b) => b.year === year && b.month === month)
+    .reduce((s, b) => s + Number(b.amount), 0);
+  const committed = fixed + installments + creditBills;
+  const outflows = committed + cashVariable.total;
 
   const catMap = new Map(categories.map((c) => [c.id, c]));
   const totals = new Map<string, number>();
   for (const e of expenses) {
-    totals.set(e.category_id, (totals.get(e.category_id) ?? 0) + Number(e.amount));
+    const value = convertAmount(e.amount, e.currency, mainCurrency, e.date, rates);
+    if (value === null) continue;
+    totals.set(e.category_id, (totals.get(e.category_id) ?? 0) + value);
   }
 
   const byCategory = [...totals.entries()]
@@ -50,16 +99,18 @@ export function summarizeMonth(params: {
     .sort((a, b) => b.total - a.total);
 
   return {
-    incomes: incomeTotal,
-    teachingIncomes,
-    variableExpenses: variable,
+    incomes: incomeTotal.total,
+    teachingIncomes: teaching.total,
+    variableExpenses: variable.total,
     fixedCosts: fixed,
     installments,
-    invested,
+    creditBills,
+    invested: investedTotal.total,
     committed,
     outflows,
-    balance: incomeTotal - outflows,
+    balance: incomeTotal.total - outflows,
     byCategory,
+    missingRates: incomeTotal.missing + variable.missing + investedTotal.missing,
   };
 }
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { CloseMonthModal } from "@/components/CloseMonthModal";
+import { useCurrency } from "@/components/CurrencyProvider";
 import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
 import { LessonForm } from "@/components/LessonForm";
@@ -14,13 +15,8 @@ import { MonthNav } from "@/components/MonthNav";
 import { useMonth } from "@/components/MonthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { emitDataChanged, onDataChanged } from "@/lib/events";
-import { lessonTotals } from "@/lib/lessons";
-import {
-  formatCurrency,
-  formatDateBR,
-  monthRange,
-  toISODate,
-} from "@/lib/format";
+import { defaultPaymentStatusForLessonStatus, lessonTotals } from "@/lib/lessons";
+import { formatDateBR, monthRange, toISODate } from "@/lib/format";
 import {
   LESSON_PAYMENT_STATUS_LABELS,
   LESSON_STATUS_LABELS,
@@ -41,6 +37,7 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { year, month, go } = useMonth();
+  const { format } = useCurrency();
   const [userId, setUserId] = useState<string | null>(null);
   const [rows, setRows] = useState<LessonRow[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -66,6 +63,10 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
   const [paying, setPaying] = useState(false);
 
   const [closeOpen, setCloseOpen] = useState(false);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<LessonStatus>("given");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const period = useMemo(() => {
     if (customRange && rangeStart && rangeEnd) {
@@ -126,6 +127,81 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
   }, [rows, studentFilter, statusFilter, paymentFilter]);
 
   const totals = useMemo(() => lessonTotals(filtered), [filtered]);
+
+  useEffect(() => {
+    setSelected((prev) => {
+      const ids = new Set(filtered.map((r) => r.id));
+      const next = new Set([...prev].filter((id) => ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filtered]);
+
+  const selectableRows = useMemo(
+    () => filtered.filter((r) => r.payment_status !== "paid"),
+    [filtered],
+  );
+  const allSelected =
+    selectableRows.length > 0 && selectableRows.every((r) => selected.has(r.id));
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) =>
+      prev.size >= selectableRows.length && selectableRows.every((r) => prev.has(r.id))
+        ? new Set()
+        : new Set(selectableRows.map((r) => r.id)),
+    );
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
+  async function applyBulkStatus() {
+    const targets = filtered.filter((r) => selected.has(r.id));
+    const blocked = targets.filter((r) => r.payment_status === "paid");
+    const updatable = targets.filter((r) => r.payment_status !== "paid");
+
+    if (updatable.length === 0) {
+      toast.error("Aulas pagas não podem mudar de status. Desfaça o pagamento antes.");
+      return;
+    }
+
+    setBulkSaving(true);
+    const { error } = await supabase
+      .from("lessons")
+      .update({
+        status: bulkStatus,
+        payment_status: defaultPaymentStatusForLessonStatus(bulkStatus),
+      })
+      .in(
+        "id",
+        updatable.map((r) => r.id),
+      );
+    setBulkSaving(false);
+
+    if (error) {
+      toast.error("Erro ao atualizar status");
+      return;
+    }
+
+    const suffix = blocked.length
+      ? ` (${blocked.length} paga${blocked.length === 1 ? "" : "s"} ignorada${blocked.length === 1 ? "" : "s"})`
+      : "";
+    toast.success(
+      `${updatable.length} aula${updatable.length === 1 ? "" : "s"} atualizada${updatable.length === 1 ? "" : "s"}${suffix}`,
+    );
+    clearSelection();
+    emitDataChanged();
+    await load();
+  }
 
   function openNew() {
     setEditing(null);
@@ -260,6 +336,32 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
 
   const columns: Column<LessonRow>[] = [
     {
+      key: "select",
+      header: (
+        <input
+          type="checkbox"
+          aria-label="Selecionar todas"
+          checked={allSelected}
+          onChange={toggleSelectAll}
+          disabled={selectableRows.length === 0}
+          className="accent-[var(--accent)]"
+        />
+      ),
+      render: (r) =>
+        r.payment_status === "paid" ? (
+          <span className="text-[var(--fg-muted)]">—</span>
+        ) : (
+          <input
+            type="checkbox"
+            aria-label="Selecionar aula"
+            checked={selected.has(r.id)}
+            onChange={() => toggleSelect(r.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="accent-[var(--accent)]"
+          />
+        ),
+    },
+    {
       key: "date",
       header: "Data",
       sortValue: (r) => r.date,
@@ -297,7 +399,7 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
       sortValue: (r) => Number(r.amount),
       render: (r) => (
         <span className="whitespace-nowrap font-semibold tabular-nums">
-          {formatCurrency(r.amount)}
+          {format(r.amount)}
         </span>
       ),
     },
@@ -463,22 +565,48 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
         <div>
           <p className="text-[var(--fg-muted)]">Dado</p>
           <p className="font-semibold tabular-nums text-[var(--fg)]">
-            {formatCurrency(totals.given)}
+            {format(totals.given)}
           </p>
         </div>
         <div>
           <p className="text-[var(--fg-muted)]">A receber</p>
           <p className="font-semibold tabular-nums text-[var(--warning)]">
-            {formatCurrency(totals.receivable)}
+            {format(totals.receivable)}
           </p>
         </div>
         <div>
           <p className="text-[var(--fg-muted)]">Recebido</p>
           <p className="font-semibold tabular-nums text-[var(--positive)]">
-            {formatCurrency(totals.received)}
+            {format(totals.received)}
           </p>
         </div>
       </div>
+
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-3 py-2">
+          <span className="text-sm font-medium text-[var(--fg)]">
+            {selected.size} selecionada{selected.size === 1 ? "" : "s"}
+          </span>
+          <span className="text-sm text-[var(--fg-muted)]">alterar status para</span>
+          <Select
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value as LessonStatus)}
+            className="w-auto py-1.5 text-sm"
+          >
+            {(Object.keys(LESSON_STATUS_LABELS) as LessonStatus[]).map((s) => (
+              <option key={s} value={s}>
+                {LESSON_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" disabled={bulkSaving} onClick={() => void applyBulkStatus()}>
+            {bulkSaving ? "Aplicando…" : "Aplicar"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={clearSelection}>
+            Limpar seleção
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-sm text-[var(--fg-muted)]">Carregando aulas…</p>
@@ -498,16 +626,37 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
               initialSort={{ key: "date", dir: "desc" }}
               footer={{
                 date: `${filtered.length} aula(s)`,
-                amount: formatCurrency(totals.receivable),
+                amount: format(totals.receivable),
                 payment: "a receber",
               }}
             />
           </div>
 
+          {selectableRows.length > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 px-1 text-xs text-[var(--fg-muted)] lg:hidden">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="accent-[var(--accent)]"
+              />
+              Selecionar todas
+            </label>
+          )}
+
           <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] lg:hidden">
             {filtered.map((row) => (
               <li key={row.id} className="space-y-2 px-3 py-3">
                 <div className="flex items-start gap-3">
+                  {row.payment_status !== "paid" && (
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar aula"
+                      checked={selected.has(row.id)}
+                      onChange={() => toggleSelect(row.id)}
+                      className="mt-1 accent-[var(--accent)]"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-[var(--fg)]">
                       {row.students?.name ?? "Aluno"}
@@ -533,7 +682,7 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
                     ) : null}
                   </div>
                   <p className="tabular-nums text-sm font-semibold text-[var(--fg)]">
-                    {formatCurrency(row.amount)}
+                    {format(row.amount)}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -644,7 +793,7 @@ export function LessonsPanel({ incomeFilter }: { incomeFilter?: string | null })
         <div className="space-y-3">
           {payingLesson && (
             <p className="text-sm text-[var(--fg-muted)]">
-              {payingLesson.students?.name} · {formatCurrency(payingLesson.amount)}
+              {payingLesson.students?.name} · {format(payingLesson.amount)}
             </p>
           )}
           <div>

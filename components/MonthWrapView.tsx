@@ -3,17 +3,36 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { useCurrency, useRowRates } from "@/components/CurrencyProvider";
 import { createClient } from "@/lib/supabase/client";
 import { budgetStatus, summarizeMonth } from "@/lib/dashboard";
+import { convertAmount, type AmountRow } from "@/lib/fx";
 import { computeStreak } from "@/lib/streak";
-import {
-  addMonths,
-  formatCurrency,
-  formatMonthYear,
-  monthRange,
-  percentChange,
-} from "@/lib/format";
-import type { Category, Debt, Expense, FixedCost, Income, Investment } from "@/lib/types";
+import { addMonths, formatMonthYear, monthRange, percentChange } from "@/lib/format";
+import type {
+  Category,
+  CreditCardBill,
+  Debt,
+  Expense,
+  FixedCost,
+  Income,
+  Investment,
+} from "@/lib/types";
+
+type WrapData = {
+  categories: Category[];
+  expenses: Expense[];
+  incomes: Income[];
+  fixedCosts: FixedCost[];
+  debts: Debt[];
+  creditCardBills: CreditCardBill[];
+  investments: Investment[];
+  prevExpenses: Expense[];
+  prevIncomes: Income[];
+  prevFixedCosts: FixedCost[];
+  prevDebts: Debt[];
+  prevCreditCardBills: CreditCardBill[];
+};
 
 export function MonthWrapView() {
   const supabase = useMemo(() => createClient(), []);
@@ -24,12 +43,10 @@ export function MonthWrapView() {
   const year = Number(params.get("year") ?? defaultPrev.year);
   const month = Number(params.get("month") ?? defaultPrev.month);
 
+  const { mainCurrency, rates, format } = useCurrency();
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<ReturnType<typeof summarizeMonth> | null>(null);
-  const [prevOutflows, setPrevOutflows] = useState(0);
-  const [seals, setSeals] = useState<string[]>([]);
+  const [data, setData] = useState<WrapData | null>(null);
   const [streakKept, setStreakKept] = useState(0);
-  const [expenseCount, setExpenseCount] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -48,11 +65,13 @@ export function MonthWrapView() {
         { data: incomes },
         { data: fixedCosts },
         { data: debts },
+        { data: bills },
         { data: investments },
         { data: prevExpenses },
         { data: prevIncomes },
         { data: prevFixed },
         { data: prevDebts },
+        { data: prevBills },
         { data: expDates },
         { data: noSpend },
       ] = await Promise.all([
@@ -71,6 +90,12 @@ export function MonthWrapView() {
           .lte("date", end),
         supabase.from("fixed_costs").select("*").eq("user_id", user.id),
         supabase.from("debts").select("*").eq("user_id", user.id),
+        supabase
+          .from("credit_card_bills")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("year", year)
+          .eq("month", month),
         supabase
           .from("investments")
           .select("*")
@@ -91,44 +116,15 @@ export function MonthWrapView() {
           .lte("date", prevRange.end),
         supabase.from("fixed_costs").select("*").eq("user_id", user.id),
         supabase.from("debts").select("*").eq("user_id", user.id),
+        supabase
+          .from("credit_card_bills")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("year", prev.year)
+          .eq("month", prev.month),
         supabase.from("expenses").select("date").eq("user_id", user.id),
         supabase.from("no_spend_days").select("date").eq("user_id", user.id),
       ]);
-
-      const cats = (categories as Category[]) ?? [];
-      const exps = (expenses as Expense[]) ?? [];
-      const current = summarizeMonth({
-        year,
-        month,
-        incomes: (incomes as Income[]) ?? [],
-        expenses: exps,
-        fixedCosts: (fixedCosts as FixedCost[]) ?? [],
-        debts: (debts as Debt[]) ?? [],
-        investments: (investments as Investment[]) ?? [],
-        categories: cats,
-      });
-      const previous = summarizeMonth({
-        year: prev.year,
-        month: prev.month,
-        incomes: (prevIncomes as Income[]) ?? [],
-        expenses: (prevExpenses as Expense[]) ?? [],
-        fixedCosts: (prevFixed as FixedCost[]) ?? [],
-        debts: (prevDebts as Debt[]) ?? [],
-        investments: [],
-        categories: cats,
-      });
-
-      const spentMap = new Map<string, number>();
-      for (const e of exps) {
-        spentMap.set(e.category_id, (spentMap.get(e.category_id) ?? 0) + Number(e.amount));
-      }
-      const earnedSeals = cats
-        .filter((c) => c.monthly_budget && Number(c.monthly_budget) > 0)
-        .filter((c) => {
-          const spent = spentMap.get(c.id) ?? 0;
-          return budgetStatus(spent, Number(c.monthly_budget)) !== "red";
-        })
-        .map((c) => `${c.icon} ${c.name}`);
 
       const dates = [
         ...(expDates ?? []).map((r) => r.date as string),
@@ -138,15 +134,93 @@ export function MonthWrapView() {
       const endDate = new Date(year, month, 0);
       const { current: streak } = computeStreak(dates, endDate);
 
-      setSummary(current);
-      setPrevOutflows(previous.outflows);
-      setSeals(earnedSeals);
+      setData({
+        categories: (categories as Category[]) ?? [],
+        expenses: (expenses as Expense[]) ?? [],
+        incomes: (incomes as Income[]) ?? [],
+        fixedCosts: (fixedCosts as FixedCost[]) ?? [],
+        debts: (debts as Debt[]) ?? [],
+        creditCardBills: (bills as CreditCardBill[]) ?? [],
+        investments: (investments as Investment[]) ?? [],
+        prevExpenses: (prevExpenses as Expense[]) ?? [],
+        prevIncomes: (prevIncomes as Income[]) ?? [],
+        prevFixedCosts: (prevFixed as FixedCost[]) ?? [],
+        prevDebts: (prevDebts as Debt[]) ?? [],
+        prevCreditCardBills: (prevBills as CreditCardBill[]) ?? [],
+      });
       setStreakKept(streak);
-      setExpenseCount(exps.length);
       setLoading(false);
     }
     void load();
   }, [supabase, year, month]);
+
+  const datedRows = useMemo<AmountRow[]>(
+    () =>
+      data
+        ? [
+            ...data.expenses,
+            ...data.incomes,
+            ...data.investments,
+            ...data.prevExpenses,
+            ...data.prevIncomes,
+          ]
+        : [],
+    [data],
+  );
+
+  useRowRates(datedRows);
+
+  const summary = useMemo(
+    () =>
+      data
+        ? summarizeMonth({
+            year,
+            month,
+            incomes: data.incomes,
+            expenses: data.expenses,
+            fixedCosts: data.fixedCosts,
+            debts: data.debts,
+            creditCardBills: data.creditCardBills,
+            investments: data.investments,
+            categories: data.categories,
+            mainCurrency,
+            rates,
+          })
+        : null,
+    [data, year, month, mainCurrency, rates],
+  );
+
+  const prevOutflows = useMemo(() => {
+    if (!data) return 0;
+    const prev = addMonths(year, month, -1);
+    return summarizeMonth({
+      year: prev.year,
+      month: prev.month,
+      incomes: data.prevIncomes,
+      expenses: data.prevExpenses,
+      fixedCosts: data.prevFixedCosts,
+      debts: data.prevDebts,
+      creditCardBills: data.prevCreditCardBills,
+      investments: [],
+      categories: data.categories,
+      mainCurrency,
+      rates,
+    }).outflows;
+  }, [data, year, month, mainCurrency, rates]);
+
+  const seals = useMemo(() => {
+    if (!data) return [];
+    const spentMap = new Map<string, number>();
+    for (const e of data.expenses) {
+      const value = convertAmount(e.amount, e.currency, mainCurrency, e.date, rates);
+      if (value === null) continue;
+      spentMap.set(e.category_id, (spentMap.get(e.category_id) ?? 0) + value);
+    }
+    return data.categories
+      .filter((c) => c.monthly_budget && Number(c.monthly_budget) > 0)
+      .filter((c) => budgetStatus(spentMap.get(c.id) ?? 0, Number(c.monthly_budget)) !== "red")
+      .map((c) => `${c.icon} ${c.name}`);
+  }, [data, mainCurrency, rates]);
 
   async function dismiss() {
     const {
@@ -161,9 +235,11 @@ export function MonthWrapView() {
     router.push("/");
   }
 
-  if (loading || !summary) {
+  if (loading || !data || !summary) {
     return <p className="text-sm text-[var(--fg-muted)]">Preparando resumo…</p>;
   }
+
+  const expenseCount = data.expenses.length;
 
   const top = summary.byCategory[0];
   const change = percentChange(summary.outflows, prevOutflows);
@@ -191,12 +267,12 @@ export function MonthWrapView() {
       </div>
 
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-2">
-        <Row label="Entradas" value={formatCurrency(summary.incomes)} />
-        <Row label="Saídas" value={formatCurrency(summary.outflows)} />
-        <Row label="Investido" value={formatCurrency(summary.invested)} />
+        <Row label="Entradas" value={format(summary.incomes)} />
+        <Row label="Saídas" value={format(summary.outflows)} />
+        <Row label="Investido" value={format(summary.invested)} />
         <Row
           label="Saldo"
-          value={formatCurrency(summary.balance)}
+          value={format(summary.balance)}
           accent={summary.balance >= 0 ? "good" : "bad"}
         />
         {change !== null && (
@@ -213,7 +289,7 @@ export function MonthWrapView() {
           <p className="mt-2 text-xl text-[var(--fg)]">
             {top.category.icon} {top.category.name}
           </p>
-          <p className="text-sm text-[var(--fg-muted)]">{formatCurrency(top.total)}</p>
+          <p className="text-sm text-[var(--fg-muted)]">{format(top.total)}</p>
         </div>
       )}
 

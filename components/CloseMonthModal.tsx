@@ -5,15 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { useCurrency } from "@/components/CurrencyProvider";
 import { createClient } from "@/lib/supabase/client";
 import { emitDataChanged } from "@/lib/events";
-import {
-  formatCurrency,
-  formatDateBR,
-  formatMonthYear,
-  monthRange,
-  toISODate,
-} from "@/lib/format";
+import { formatDateBR, formatMonthYear, monthRange, toISODate } from "@/lib/format";
 import type { Lesson, Student } from "@/lib/types";
 
 type LessonRow = Lesson & {
@@ -36,6 +31,7 @@ export function CloseMonthModal({
   onDone: () => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const { format } = useCurrency();
   const monthlyStudents = useMemo(
     () => students.filter((s) => s.billing_mode === "monthly" && s.active),
     [students],
@@ -194,7 +190,7 @@ export function CloseMonthModal({
                         {formatDateBR(l.date)}
                       </span>
                       <span className="tabular-nums text-sm text-[var(--fg-muted)]">
-                        {formatCurrency(l.amount)}
+                        {format(l.amount)}
                       </span>
                     </label>
                   </li>
@@ -204,7 +200,7 @@ export function CloseMonthModal({
 
             <p className="text-right text-sm text-[var(--fg)]">
               Total:{" "}
-              <span className="font-semibold tabular-nums">{formatCurrency(total)}</span>
+              <span className="font-semibold tabular-nums">{format(total)}</span>
               <span className="text-[var(--fg-muted)]">
                 {" "}
                 ({selected.size} aula{selected.size === 1 ? "" : "s"})

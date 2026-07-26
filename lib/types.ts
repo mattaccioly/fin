@@ -1,3 +1,5 @@
+import type { CurrencyCode } from "@/lib/currencies";
+
 export type IncomeSource =
   | "salary"
   | "capes_scholarship"
@@ -43,11 +45,19 @@ export type Project = {
   updated_at: string;
 };
 
+export type UserPreferences = {
+  user_id: string;
+  main_currency: CurrencyCode;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Expense = {
   id: string;
   user_id: string;
   date: string;
   amount: number;
+  currency: CurrencyCode;
   category_id: string;
   description: string | null;
   payment_method: PaymentMethod;
@@ -63,6 +73,7 @@ export type Income = {
   user_id: string;
   date: string;
   amount: number;
+  currency: CurrencyCode;
   source: IncomeSource;
   description: string | null;
   is_recurring: boolean;
@@ -96,11 +107,38 @@ export type Debt = {
   updated_at: string;
 };
 
+export type CreditCard = {
+  id: string;
+  user_id: string;
+  name: string;
+  due_day: number;
+  closing_day: number | null;
+  last4: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreditCardBill = {
+  id: string;
+  user_id: string;
+  credit_card_id: string;
+  year: number;
+  month: number;
+  amount: number;
+  paid: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  credit_cards?: Pick<CreditCard, "id" | "name" | "last4" | "due_day" | "closing_day"> | null;
+};
+
 export type Investment = {
   id: string;
   user_id: string;
   date: string;
   amount: number;
+  currency: CurrencyCode;
   vehicle: string;
   description: string | null;
   project_id: string | null;

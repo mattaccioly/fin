@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCurrency } from "@/components/CurrencyProvider";
 import { EmptyState } from "@/components/EmptyState";
 import { createClient } from "@/lib/supabase/client";
 import { onDataChanged } from "@/lib/events";
 import { groupReceivableByGuardian } from "@/lib/lessons";
-import { formatCurrency } from "@/lib/format";
 import type { Lesson, Student } from "@/lib/types";
 
 type PendingLesson = Lesson & {
@@ -18,6 +18,7 @@ type PendingLesson = Lesson & {
 
 export function LessonsReceivableWidget() {
   const supabase = useMemo(() => createClient(), []);
+  const { format } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<ReturnType<typeof groupReceivableByGuardian>>([]);
 
@@ -77,7 +78,7 @@ export function LessonsReceivableWidget() {
       ) : (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
           <p className="text-2xl font-semibold tabular-nums text-[var(--warning)]">
-            {formatCurrency(total)}
+            {format(total)}
           </p>
           <p className="mt-1 text-xs text-[var(--fg-muted)]">Total pendente</p>
 
@@ -94,7 +95,7 @@ export function LessonsReceivableWidget() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-medium text-[var(--fg)]">
-                      {g.label} — {formatCurrency(g.total)}
+                      {g.label} — {format(g.total)}
                     </p>
                     <p className="text-xs text-[var(--fg-muted)]">
                       {g.count} aula{g.count === 1 ? "" : "s"}

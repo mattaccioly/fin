@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
+import { CurrencySelect } from "@/components/CurrencySelect";
+import { useCurrency } from "@/components/CurrencyProvider";
 import { ensureCategories } from "@/lib/categories";
+import { CURRENCY_SYMBOLS, toCurrencyCode, type CurrencyCode } from "@/lib/currencies";
 import { emitDataChanged } from "@/lib/events";
 import { createClient } from "@/lib/supabase/client";
-import { parseAmountInput, toISODate } from "@/lib/format";
+import { formatDateBR, parseAmountInput, toISODate } from "@/lib/format";
 import {
   PAYMENT_METHOD_LABELS,
   type Category,
@@ -18,7 +21,14 @@ import {
 
 export type EditableExpense = Pick<
   Expense,
-  "id" | "amount" | "category_id" | "payment_method" | "description" | "date" | "project_id"
+  | "id"
+  | "amount"
+  | "currency"
+  | "category_id"
+  | "payment_method"
+  | "description"
+  | "date"
+  | "project_id"
 >;
 
 export function ExpenseForm({
@@ -35,10 +45,13 @@ export function ExpenseForm({
   frameless?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const { mainCurrency } = useCurrency();
   const [userId, setUserId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyCode>(mainCurrency);
+  const currencyTouched = useRef(false);
   const [categoryId, setCategoryId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [description, setDescription] = useState("");
@@ -75,15 +88,21 @@ export function ExpenseForm({
   }, [supabase]);
 
   useEffect(() => {
+    if (editing || currencyTouched.current) return;
+    setCurrency(mainCurrency);
+  }, [mainCurrency, editing]);
+
+  useEffect(() => {
     if (!editing) return;
     setAmount(String(editing.amount).replace(".", ","));
+    setCurrency(toCurrencyCode(editing.currency, mainCurrency));
     setCategoryId(editing.category_id);
     setPaymentMethod(editing.payment_method);
     setDescription(editing.description ?? "");
     setDate(editing.date);
     setLinkProject(!!editing.project_id);
     setProjectId(editing.project_id ?? "");
-  }, [editing]);
+  }, [editing, mainCurrency]);
 
   function resetAfterSave() {
     setAmount("");
@@ -104,6 +123,7 @@ export function ExpenseForm({
     const payload = {
       user_id: userId,
       amount: value,
+      currency,
       category_id: categoryId,
       payment_method: paymentMethod,
       description: description.trim() || null,
@@ -129,6 +149,8 @@ export function ExpenseForm({
     onSaved?.();
   }
 
+  const symbol = CURRENCY_SYMBOLS[currency];
+
   return (
     <form
       onSubmit={handleSave}
@@ -140,21 +162,43 @@ export function ExpenseForm({
     >
       <div>
         <Label htmlFor="amount">Valor</Label>
-        <div className="relative">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[var(--fg-muted)]">
-            R$
-          </span>
-          <input
-            id="amount"
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="0,00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-4 pl-14 pr-3 text-4xl font-semibold tabular-nums text-[var(--fg)] outline-none transition placeholder:text-[var(--fg-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]"
-            autoFocus={autoFocusAmount}
+        <div className="flex items-stretch gap-2">
+          <div className="relative flex-1">
+            <span
+              className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[var(--fg-muted)] ${
+                symbol.length > 2 ? "text-xl" : ""
+              }`}
+            >
+              {symbol}
+            </span>
+            <input
+              id="amount"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0,00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className={`w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-4 pr-3 text-4xl font-semibold tabular-nums text-[var(--fg)] outline-none transition placeholder:text-[var(--fg-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)] ${
+                symbol.length > 2 ? "pl-20" : "pl-14"
+              }`}
+              autoFocus={autoFocusAmount}
+            />
+          </div>
+          <CurrencySelect
+            codeOnly
+            value={currency}
+            onChange={(next) => {
+              currencyTouched.current = true;
+              setCurrency(next);
+            }}
+            className="h-auto w-24 shrink-0 font-medium"
           />
         </div>
+        {currency !== mainCurrency && (
+          <p className="mt-1.5 text-xs text-[var(--fg-muted)]">
+            Convertido para {mainCurrency} pela cotação de {formatDateBR(date)}.
+          </p>
+        )}
       </div>
 
       <div>

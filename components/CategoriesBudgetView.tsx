@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { useCurrency } from "@/components/CurrencyProvider";
 import { ensureCategories } from "@/lib/categories";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency, parseAmountInput } from "@/lib/format";
+import { parseAmountInput } from "@/lib/format";
 import type { Category } from "@/lib/types";
 
 export function CategoriesBudgetView() {
   const supabase = useMemo(() => createClient(), []);
+  const { mainCurrency, format } = useCurrency();
   const [categories, setCategories] = useState<Category[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
@@ -60,7 +62,10 @@ export function CategoriesBudgetView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Orçamentos" subtitle="Meta mensal por categoria (opcional)" />
+      <PageHeader
+        title="Orçamentos"
+        subtitle={`Meta mensal por categoria em ${mainCurrency} (opcional)`}
+      />
       <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
         {categories.map((c) => (
           <li
@@ -71,7 +76,7 @@ export function CategoriesBudgetView() {
               {c.icon} {c.name}
               {c.monthly_budget != null && (
                 <span className="ml-2 text-xs text-[var(--fg-muted)]">
-                  atual: {formatCurrency(c.monthly_budget)}
+                  atual: {format(c.monthly_budget)}
                 </span>
               )}
             </p>

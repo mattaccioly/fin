@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { Amount, TotalAmount } from "@/components/Amount";
+import { useRowRates } from "@/components/CurrencyProvider";
 import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpenseForm } from "@/components/ExpenseForm";
@@ -13,11 +15,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useMonth } from "@/components/MonthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { onDataChanged } from "@/lib/events";
-import {
-  formatCurrency,
-  formatDateBR,
-  monthRange,
-} from "@/lib/format";
+import { formatDateBR, monthRange } from "@/lib/format";
 import {
   PAYMENT_METHOD_LABELS,
   type Category,
@@ -107,7 +105,7 @@ export function ExpensesView() {
     });
   }, [rows, catFilter, methodFilter, projectFilter, search]);
 
-  const total = filtered.reduce((s, r) => s + Number(r.amount), 0);
+  useRowRates(filtered);
 
   function toggleCategory(id: string) {
     setCatFilter((prev) =>
@@ -193,9 +191,12 @@ export function ExpensesView() {
       align: "right",
       sortValue: (r) => Number(r.amount),
       render: (r) => (
-        <span className="whitespace-nowrap font-semibold tabular-nums">
-          {formatCurrency(r.amount)}
-        </span>
+        <Amount
+          value={r.amount}
+          currency={r.currency}
+          date={r.date}
+          className="whitespace-nowrap font-semibold tabular-nums"
+        />
       ),
     },
     {
@@ -344,7 +345,7 @@ export function ExpensesView() {
               initialSort={{ key: "date", dir: "desc" }}
               footer={{
                 date: `${filtered.length} lançamento(s)`,
-                amount: formatCurrency(total),
+                amount: <TotalAmount rows={filtered} />,
               }}
             />
           </div>
@@ -364,9 +365,12 @@ export function ExpensesView() {
                       {exp.projects ? ` · ${exp.projects.emoji} ${exp.projects.name}` : ""}
                     </p>
                   </div>
-                  <p className="tabular-nums text-sm font-semibold text-[var(--fg)]">
-                    {formatCurrency(exp.amount)}
-                  </p>
+                  <Amount
+                    value={exp.amount}
+                    currency={exp.currency}
+                    date={exp.date}
+                    className="text-right tabular-nums text-sm font-semibold text-[var(--fg)]"
+                  />
                   <div className="flex gap-1">
                     <button
                       type="button"
@@ -388,7 +392,7 @@ export function ExpensesView() {
             </ul>
             <p className="text-right text-sm text-[var(--fg-muted)]">
               Total filtrado:{" "}
-              <span className="font-semibold text-[var(--fg)]">{formatCurrency(total)}</span>
+              <TotalAmount rows={filtered} className="font-semibold text-[var(--fg)]" />
             </p>
           </div>
         </>

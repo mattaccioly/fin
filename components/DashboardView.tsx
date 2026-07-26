@@ -9,22 +9,21 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { Amount } from "@/components/Amount";
+import { useCurrency, useRowRates } from "@/components/CurrencyProvider";
 import { EmptyState } from "@/components/EmptyState";
 import { LessonsReceivableWidget } from "@/components/LessonsReceivableWidget";
 import { MonthNav } from "@/components/MonthNav";
 import { useMonth } from "@/components/MonthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { budgetStatus, momDelta, summarizeMonth } from "@/lib/dashboard";
+import { convertAmount, type AmountRow } from "@/lib/fx";
 import { onDataChanged } from "@/lib/events";
-import {
-  addMonths,
-  formatCurrency,
-  formatDateBR,
-  monthRange,
-} from "@/lib/format";
+import { addMonths, formatDateBR, monthRange } from "@/lib/format";
 import {
   PAYMENT_METHOD_LABELS,
   type Category,
+  type CreditCardBill,
   type Debt,
   type Expense,
   type FixedCost,
@@ -33,18 +32,30 @@ import {
   type Project,
 } from "@/lib/types";
 
-type ProjectCard = Project & { spent: number; invested: number };
+type ProjectCard = Project & { expenseRows: AmountRow[]; investmentRows: AmountRow[] };
+
+type MonthData = {
+  categories: Category[];
+  expenses: Expense[];
+  incomes: Income[];
+  fixedCosts: FixedCost[];
+  debts: Debt[];
+  creditCardBills: CreditCardBill[];
+  investments: Investment[];
+  prevExpenses: Expense[];
+  prevIncomes: Income[];
+  prevFixedCosts: FixedCost[];
+  prevDebts: Debt[];
+  prevCreditCardBills: CreditCardBill[];
+  projects: ProjectCard[];
+};
 
 export function DashboardView() {
   const supabase = useMemo(() => createClient(), []);
   const { year, month, go } = useMonth();
+  const { mainCurrency, rates, sum, format } = useCurrency();
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<ReturnType<typeof summarizeMonth> | null>(null);
-  const [prevOutflows, setPrevOutflows] = useState(0);
-  const [prevIncomes, setPrevIncomes] = useState(0);
-  const [monthExpenses, setMonthExpenses] = useState<Expense[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [projects, setProjects] = useState<ProjectCard[]>([]);
+  const [data, setData] = useState<MonthData | null>(null);
 
   const load = useCallback(async () => {
     const {
@@ -62,11 +73,13 @@ export function DashboardView() {
       { data: incomes },
       { data: fixedCosts },
       { data: debts },
+      { data: bills },
       { data: investments },
       { data: prevExpenses },
       { data: prevIncomesData },
       { data: prevFixed },
       { data: prevDebts },
+      { data: prevBills },
       { data: activeProjects },
     ] = await Promise.all([
       supabase.from("categories").select("*").eq("user_id", user.id),
@@ -84,6 +97,12 @@ export function DashboardView() {
         .lte("date", end),
       supabase.from("fixed_costs").select("*").eq("user_id", user.id),
       supabase.from("debts").select("*").eq("user_id", user.id),
+      supabase
+        .from("credit_card_bills")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("year", year)
+        .eq("month", month),
       supabase
         .from("investments")
         .select("*")
@@ -105,6 +124,12 @@ export function DashboardView() {
       supabase.from("fixed_costs").select("*").eq("user_id", user.id),
       supabase.from("debts").select("*").eq("user_id", user.id),
       supabase
+        .from("credit_card_bills")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("year", prev.year)
+        .eq("month", prev.month),
+      supabase
         .from("projects")
         .select("*")
         .eq("user_id", user.id)
@@ -112,52 +137,90 @@ export function DashboardView() {
         .order("created_at", { ascending: false }),
     ]);
 
-    const catList = (cats as Category[]) ?? [];
-    const expList = (expenses as Expense[]) ?? [];
-    const current = summarizeMonth({
-      year,
-      month,
-      incomes: (incomes as Income[]) ?? [],
-      expenses: expList,
-      fixedCosts: (fixedCosts as FixedCost[]) ?? [],
-      debts: (debts as Debt[]) ?? [],
-      investments: (investments as Investment[]) ?? [],
-      categories: catList,
-    });
-    const previous = summarizeMonth({
-      year: prev.year,
-      month: prev.month,
-      incomes: (prevIncomesData as Income[]) ?? [],
-      expenses: (prevExpenses as Expense[]) ?? [],
-      fixedCosts: (prevFixed as FixedCost[]) ?? [],
-      debts: (prevDebts as Debt[]) ?? [],
-      investments: [],
-      categories: catList,
-    });
-
     const projList = (activeProjects as Project[]) ?? [];
     const projCards: ProjectCard[] = await Promise.all(
       projList.map(async (p) => {
         const [{ data: exps }, { data: invs }] = await Promise.all([
-          supabase.from("expenses").select("amount").eq("project_id", p.id),
-          supabase.from("investments").select("amount").eq("project_id", p.id),
+          supabase.from("expenses").select("amount, currency, date").eq("project_id", p.id),
+          supabase.from("investments").select("amount, currency, date").eq("project_id", p.id),
         ]);
         return {
           ...p,
-          spent: (exps ?? []).reduce((s, e) => s + Number(e.amount), 0),
-          invested: (invs ?? []).reduce((s, e) => s + Number(e.amount), 0),
+          expenseRows: (exps as AmountRow[]) ?? [],
+          investmentRows: (invs as AmountRow[]) ?? [],
         };
       }),
     );
 
-    setCategories(catList);
-    setMonthExpenses(expList);
-    setSummary(current);
-    setPrevOutflows(previous.outflows);
-    setPrevIncomes(previous.incomes);
-    setProjects(projCards);
+    setData({
+      categories: (cats as Category[]) ?? [],
+      expenses: (expenses as Expense[]) ?? [],
+      incomes: (incomes as Income[]) ?? [],
+      fixedCosts: (fixedCosts as FixedCost[]) ?? [],
+      debts: (debts as Debt[]) ?? [],
+      creditCardBills: (bills as CreditCardBill[]) ?? [],
+      investments: (investments as Investment[]) ?? [],
+      prevExpenses: (prevExpenses as Expense[]) ?? [],
+      prevIncomes: (prevIncomesData as Income[]) ?? [],
+      prevFixedCosts: (prevFixed as FixedCost[]) ?? [],
+      prevDebts: (prevDebts as Debt[]) ?? [],
+      prevCreditCardBills: (prevBills as CreditCardBill[]) ?? [],
+      projects: projCards,
+    });
     setLoading(false);
   }, [supabase, year, month]);
+
+  const datedRows = useMemo<AmountRow[]>(() => {
+    if (!data) return [];
+    return [
+      ...data.expenses,
+      ...data.incomes,
+      ...data.investments,
+      ...data.prevExpenses,
+      ...data.prevIncomes,
+      ...data.projects.flatMap((p) => [...p.expenseRows, ...p.investmentRows]),
+    ];
+  }, [data]);
+
+  useRowRates(datedRows);
+
+  const summary = useMemo(
+    () =>
+      data
+        ? summarizeMonth({
+            year,
+            month,
+            incomes: data.incomes,
+            expenses: data.expenses,
+            fixedCosts: data.fixedCosts,
+            debts: data.debts,
+            creditCardBills: data.creditCardBills,
+            investments: data.investments,
+            categories: data.categories,
+            mainCurrency,
+            rates,
+          })
+        : null,
+    [data, year, month, mainCurrency, rates],
+  );
+
+  const previous = useMemo(() => {
+    if (!data) return null;
+    const prev = addMonths(year, month, -1);
+    return summarizeMonth({
+      year: prev.year,
+      month: prev.month,
+      incomes: data.prevIncomes,
+      expenses: data.prevExpenses,
+      fixedCosts: data.prevFixedCosts,
+      debts: data.prevDebts,
+      creditCardBills: data.prevCreditCardBills,
+      investments: [],
+      categories: data.categories,
+      mainCurrency,
+      rates,
+    });
+  }, [data, year, month, mainCurrency, rates]);
 
   useEffect(() => {
     setLoading(true);
@@ -166,20 +229,20 @@ export function DashboardView() {
 
   useEffect(() => onDataChanged(() => void load()), [load]);
 
-  if (loading || !summary) {
+  if (loading || !data || !summary || !previous) {
     return <p className="text-sm text-[var(--fg-muted)]">Carregando dashboard…</p>;
   }
 
-  const outflowDelta = momDelta(summary.outflows, prevOutflows);
-  const incomeDelta = momDelta(summary.incomes, prevIncomes);
+  const outflowDelta = momDelta(summary.outflows, previous.outflows);
+  const incomeDelta = momDelta(summary.incomes, previous.incomes);
   const chartData = summary.byCategory.map((c) => ({
     name: c.category.name,
     value: c.total,
     color: c.category.color,
   }));
 
-  const catMap = new Map(categories.map((c) => [c.id, c]));
-  const recentExpenses = [...monthExpenses]
+  const catMap = new Map(data.categories.map((c) => [c.id, c]));
+  const recentExpenses = [...data.expenses]
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.created_at < b.created_at ? 1 : -1))
     .slice(0, 8);
 
@@ -202,9 +265,7 @@ export function DashboardView() {
           delta={incomeDelta}
           positiveGood
           subtitle={
-            summary.teachingIncomes > 0
-              ? `Aulas ${formatCurrency(summary.teachingIncomes)}`
-              : undefined
+            summary.teachingIncomes > 0 ? `Aulas ${format(summary.teachingIncomes)}` : undefined
           }
         />
         <StatCard label="Saídas" value={summary.outflows} delta={outflowDelta} positiveGood={false} />
@@ -246,7 +307,7 @@ export function DashboardView() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(v: number) => formatCurrency(v)}
+                      formatter={(v: number) => format(v)}
                       contentStyle={{
                         background: "var(--surface-2)",
                         border: "1px solid var(--border)",
@@ -262,7 +323,7 @@ export function DashboardView() {
                     <span className="text-[var(--fg)]">
                       {category.icon} {category.name}
                     </span>
-                    <span className="tabular-nums text-[var(--fg-muted)]">{formatCurrency(total)}</span>
+                    <span className="tabular-nums text-[var(--fg-muted)]">{format(total)}</span>
                   </li>
                 ))}
               </ul>
@@ -280,27 +341,28 @@ export function DashboardView() {
             <h2 className="text-sm font-medium text-[var(--fg-muted)]">Comprometido do mês</h2>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <p className="text-2xl font-semibold tabular-nums text-[var(--fg)]">
-                {formatCurrency(summary.committed)}
+                {format(summary.committed)}
               </p>
               <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                Fixos {formatCurrency(summary.fixedCosts)} + Parcelas{" "}
-                {formatCurrency(summary.installments)}
+                Fixos {format(summary.fixedCosts)} + Parcelas {format(summary.installments)} +
+                Faturas {format(summary.creditBills)}
               </p>
             </div>
           </div>
 
           <div className="space-y-3">
             <h2 className="text-sm font-medium text-[var(--fg-muted)]">Projetos ativos</h2>
-            {projects.length === 0 ? (
+            {data.projects.length === 0 ? (
               <EmptyState
                 title="Nenhum projeto ativo"
                 description="Crie um projeto e vincule gastos e aportes."
               />
             ) : (
               <ul className="space-y-2">
-                {projects.map((p) => {
+                {data.projects.map((p) => {
                   const target = p.target_amount ? Number(p.target_amount) : null;
-                  const pct = target ? Math.min(100, (p.invested / target) * 100) : null;
+                  const invested = sum(p.investmentRows).total;
+                  const pct = target ? Math.min(100, (invested / target) * 100) : null;
                   return (
                     <li key={p.id}>
                       <Link
@@ -312,8 +374,8 @@ export function DashboardView() {
                             {p.emoji} {p.name}
                           </span>
                           <span className="tabular-nums text-xs text-[var(--fg-muted)]">
-                            {formatCurrency(p.invested)}
-                            {target ? ` / ${formatCurrency(target)}` : ""}
+                            {format(invested)}
+                            {target ? ` / ${format(target)}` : ""}
                           </span>
                         </div>
                         {pct !== null && (
@@ -358,9 +420,12 @@ export function DashboardView() {
                       {formatDateBR(exp.date)} · {PAYMENT_METHOD_LABELS[exp.payment_method]}
                     </p>
                   </div>
-                  <p className="tabular-nums text-sm font-semibold text-[var(--fg)]">
-                    {formatCurrency(exp.amount)}
-                  </p>
+                  <Amount
+                    value={exp.amount}
+                    currency={exp.currency}
+                    date={exp.date}
+                    className="text-right tabular-nums text-sm font-semibold text-[var(--fg)]"
+                  />
                 </li>
               );
             })}
@@ -386,6 +451,8 @@ function StatCard({
   highlight?: "good" | "bad";
   subtitle?: string;
 }) {
+  const { format } = useCurrency();
+
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 lg:p-4">
       <p className="text-xs text-[var(--fg-muted)]">{label}</p>
@@ -398,7 +465,7 @@ function StatCard({
               : "text-[var(--fg)]"
         }`}
       >
-        {formatCurrency(value)}
+        {format(value)}
       </p>
       {subtitle ? (
         <p className="mt-0.5 text-xs text-[var(--fg-muted)]">{subtitle}</p>
@@ -423,9 +490,9 @@ function StatCard({
 
 function BudgetBars({ year, month }: { year: number; month: number }) {
   const supabase = useMemo(() => createClient(), []);
-  const [rows, setRows] = useState<
-    { category: Category; spent: number; budget: number; status: "green" | "yellow" | "red" }[]
-  >([]);
+  const { mainCurrency, rates, format } = useCurrency();
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [expenses, setExpenses] = useState<(AmountRow & { category_id: string })[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -434,7 +501,7 @@ function BudgetBars({ year, month }: { year: number; month: number }) {
       } = await supabase.auth.getUser();
       if (!user) return;
       const { start, end } = monthRange(year, month);
-      const [{ data: cats }, { data: expenses }] = await Promise.all([
+      const [{ data: cats }, { data: exps }] = await Promise.all([
         supabase
           .from("categories")
           .select("*")
@@ -442,30 +509,34 @@ function BudgetBars({ year, month }: { year: number; month: number }) {
           .not("monthly_budget", "is", null),
         supabase
           .from("expenses")
-          .select("category_id, amount")
+          .select("category_id, amount, currency, date")
           .eq("user_id", user.id)
           .gte("date", start)
           .lte("date", end),
       ]);
-      const spentMap = new Map<string, number>();
-      for (const e of expenses ?? []) {
-        spentMap.set(
-          e.category_id,
-          (spentMap.get(e.category_id) ?? 0) + Number(e.amount),
-        );
-      }
-      setRows(
-        ((cats as Category[]) ?? [])
-          .filter((c) => c.monthly_budget && Number(c.monthly_budget) > 0)
-          .map((c) => {
-            const budget = Number(c.monthly_budget);
-            const spent = spentMap.get(c.id) ?? 0;
-            return { category: c, spent, budget, status: budgetStatus(spent, budget) };
-          }),
-      );
+      setCategories((cats as Category[]) ?? []);
+      setExpenses((exps as (AmountRow & { category_id: string })[]) ?? []);
     }
     void load();
   }, [supabase, year, month]);
+
+  useRowRates(expenses);
+
+  const rows = useMemo(() => {
+    const spentMap = new Map<string, number>();
+    for (const e of expenses) {
+      const value = convertAmount(e.amount, e.currency ?? mainCurrency, mainCurrency, e.date, rates);
+      if (value === null) continue;
+      spentMap.set(e.category_id, (spentMap.get(e.category_id) ?? 0) + value);
+    }
+    return categories
+      .filter((c) => c.monthly_budget && Number(c.monthly_budget) > 0)
+      .map((c) => {
+        const budget = Number(c.monthly_budget);
+        const spent = spentMap.get(c.id) ?? 0;
+        return { category: c, spent, budget, status: budgetStatus(spent, budget) };
+      });
+  }, [categories, expenses, mainCurrency, rates]);
 
   if (rows.length === 0) {
     return (
@@ -493,7 +564,7 @@ function BudgetBars({ year, month }: { year: number; month: number }) {
                 {category.icon} {category.name}
               </span>
               <span className="tabular-nums text-[var(--fg-muted)]">
-                {formatCurrency(spent)} / {formatCurrency(budget)}
+                {format(spent)} / {format(budget)}
               </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">

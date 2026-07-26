@@ -3,16 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
+import { Amount } from "@/components/Amount";
+import { useRowRates } from "@/components/CurrencyProvider";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpenseForm } from "@/components/ExpenseForm";
 import { createClient } from "@/lib/supabase/client";
 import { onDataChanged } from "@/lib/events";
-import {
-  formatCurrency,
-  formatDateBR,
-  startOfWeek,
-  toISODate,
-} from "@/lib/format";
+import { formatDateBR, startOfWeek, toISODate } from "@/lib/format";
 import { computeStreak } from "@/lib/streak";
 import {
   PAYMENT_METHOD_LABELS,
@@ -31,6 +28,8 @@ export function QuickExpense() {
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [streak, setStreak] = useState({ current: 0, best: 0 });
   const [loading, setLoading] = useState(true);
+
+  useRowRates(expenses);
 
   const loadStreak = useCallback(
     async (uid: string) => {
@@ -208,9 +207,12 @@ function ExpenseList({
               {formatDateBR(exp.date)} · {PAYMENT_METHOD_LABELS[exp.payment_method]}
             </p>
           </div>
-          <p className="tabular-nums text-sm font-semibold text-[var(--fg)]">
-            {formatCurrency(exp.amount)}
-          </p>
+          <Amount
+            value={exp.amount}
+            currency={exp.currency}
+            date={exp.date}
+            className="text-right tabular-nums text-sm font-semibold text-[var(--fg)]"
+          />
           <div className="flex gap-1">
             <button
               type="button"

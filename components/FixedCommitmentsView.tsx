@@ -5,16 +5,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { useCurrency } from "@/components/CurrencyProvider";
+import { CreditCardsSection } from "@/components/CreditCardsSection";
 import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { createClient } from "@/lib/supabase/client";
 import { payoffLabel, remainingAmount, remainingInstallments } from "@/lib/debts";
-import { formatCurrency, parseAmountInput, toISODate } from "@/lib/format";
+import { parseAmountInput, toISODate } from "@/lib/format";
 import type { Debt, FixedCost } from "@/lib/types";
 
 export function FixedCommitmentsView() {
   const supabase = useMemo(() => createClient(), []);
+  const { format } = useCurrency();
   const [userId, setUserId] = useState<string | null>(null);
   const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -164,7 +167,7 @@ export function FixedCommitmentsView() {
       sortValue: (r) => Number(r.amount),
       render: (r) => (
         <span className="whitespace-nowrap font-semibold tabular-nums">
-          {formatCurrency(r.amount)}
+          {format(r.amount)}
         </span>
       ),
     },
@@ -236,7 +239,7 @@ export function FixedCommitmentsView() {
       sortValue: (r) => Number(r.installment_amount),
       render: (r) => (
         <span className="whitespace-nowrap tabular-nums">
-          {formatCurrency(r.installment_amount)}/mês
+          {format(r.installment_amount)}/mês
         </span>
       ),
     },
@@ -247,7 +250,7 @@ export function FixedCommitmentsView() {
       sortValue: (r) => remainingAmount(r),
       render: (r) => (
         <span className="whitespace-nowrap tabular-nums text-[var(--fg-muted)]">
-          {formatCurrency(remainingAmount(r))} ({remainingInstallments(r)}×)
+          {format(remainingAmount(r))} ({remainingInstallments(r)}×)
         </span>
       ),
     },
@@ -298,7 +301,7 @@ export function FixedCommitmentsView() {
       <section className="space-y-4">
         <PageHeader
           title="Custos fixos"
-          subtitle={`Total ativo: ${formatCurrency(totalActive)}`}
+          subtitle={`Total ativo: ${format(totalActive)}`}
           action={
             <Button
               size="sm"
@@ -327,7 +330,7 @@ export function FixedCommitmentsView() {
                 }}
                 footer={{
                   name: `${fixedCosts.length} custo(s)`,
-                  amount: formatCurrency(totalActive),
+                  amount: format(totalActive),
                 }}
               />
             </div>
@@ -345,7 +348,7 @@ export function FixedCommitmentsView() {
                       {item.category ? ` · ${item.category}` : ""}
                     </p>
                   </div>
-                  <p className="tabular-nums text-sm font-semibold">{formatCurrency(item.amount)}</p>
+                  <p className="tabular-nums text-sm font-semibold">{format(item.amount)}</p>
                   <button
                     type="button"
                     className="rounded-lg px-2 py-1 text-xs text-[var(--fg-muted)] hover:bg-[var(--surface-2)]"
@@ -380,7 +383,7 @@ export function FixedCommitmentsView() {
       <section className="space-y-4">
         <PageHeader
           title="Parcelamentos"
-          subtitle={`Comprometido mensal: ${formatCurrency(monthlyInstallments)}`}
+          subtitle={`Comprometido mensal: ${format(monthlyInstallments)}`}
           action={
             <Button
               size="sm"
@@ -412,7 +415,7 @@ export function FixedCommitmentsView() {
                 }}
                 footer={{
                   name: `${debts.length} parcelamento(s)`,
-                  installment: formatCurrency(monthlyInstallments),
+                  installment: format(monthlyInstallments),
                 }}
               />
             </div>
@@ -434,12 +437,12 @@ export function FixedCommitmentsView() {
                           {paid}/{total} parcelas — {payoffLabel(debt)}
                         </p>
                         <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                          Restante: {formatCurrency(remainingAmount(debt))} (
-                          {remainingInstallments(debt)}× {formatCurrency(debt.installment_amount)})
+                          Restante: {format(remainingAmount(debt))} (
+                          {remainingInstallments(debt)}× {format(debt.installment_amount)})
                         </p>
                       </div>
                       <p className="tabular-nums text-sm font-semibold">
-                        {formatCurrency(debt.installment_amount)}/mês
+                        {format(debt.installment_amount)}/mês
                       </p>
                     </div>
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
@@ -472,6 +475,8 @@ export function FixedCommitmentsView() {
           </>
         )}
       </section>
+
+      <CreditCardsSection />
 
       <Modal
         open={fixedFormOpen}

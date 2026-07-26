@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
+import { MainCurrencySetting } from "@/components/MainCurrencySetting";
 import { PageHeader } from "@/components/PageHeader";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -48,6 +49,11 @@ export default function MorePage() {
           </li>
         ))}
       </ul>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-[var(--fg-muted)]">Moeda principal</h2>
+        <MainCurrencySetting />
+      </section>
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium text-[var(--fg-muted)]">Aparência</h2>

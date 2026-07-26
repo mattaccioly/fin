@@ -15,7 +15,7 @@ App web single-user para organizar finanças com foco em **registrar um gasto em
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon` `public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 3. Em **Authentication → Users**, clique em **Add user** e crie seu usuário (e-mail + senha). Não há cadastro público no app.
-4. Em **SQL Editor**, rode o conteúdo de [`supabase/migrations/20260725120000_init.sql`](supabase/migrations/20260725120000_init.sql) (ou use a CLI do Supabase: `supabase db push` se o projeto estiver linkado).
+4. Em **SQL Editor**, rode as migrations de [`supabase/migrations/`](supabase/migrations/) na ordem do nome do arquivo (ou use a CLI do Supabase: `supabase db push` se o projeto estiver linkado).
 
 ## 2. Configurar o ambiente local
 
@@ -49,5 +49,6 @@ Abra [http://localhost:3000](http://localhost:3000) e faça login.
 ## Notas
 
 - Categorias padrão são criadas no primeiro login autenticado.
-- Valores em BRL (`numeric(12,2)`), interface em pt-BR.
+- Interface em pt-BR; valores em `numeric(12,2)`.
+- Moeda principal escolhida em `/more` (BRL, EUR, USD, GBP, CLP, DKK, PEN, CNY). Gastos, entradas e aportes podem ser lançados em outra moeda e são convertidos para a moeda principal pela cotação do dia do lançamento (`/api/fx`, com cache em `fx_rates`).
 - RLS ativo em todas as tabelas (`auth.uid() = user_id`).

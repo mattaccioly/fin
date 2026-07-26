@@ -5,16 +5,20 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
+import { Amount } from "@/components/Amount";
+import { useCurrency, useRowRates } from "@/components/CurrencyProvider";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency, formatDateBR, parseAmountInput } from "@/lib/format";
+import type { AmountRow } from "@/lib/fx";
+import { formatDateBR, parseAmountInput } from "@/lib/format";
 import type { Project, ProjectStatus } from "@/lib/types";
 
-type ProjectCard = Project & { spent: number; invested: number };
+type ProjectCard = Project & { expenseRows: AmountRow[]; investmentRows: AmountRow[] };
 
 export function ProjectsList() {
   const supabase = useMemo(() => createClient(), []);
+  const { mainCurrency, sum, format } = useCurrency();
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<ProjectCard[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -36,13 +40,13 @@ export function ProjectsList() {
     const cards: ProjectCard[] = await Promise.all(
       list.map(async (p) => {
         const [{ data: exps }, { data: invs }] = await Promise.all([
-          supabase.from("expenses").select("amount").eq("project_id", p.id),
-          supabase.from("investments").select("amount").eq("project_id", p.id),
+          supabase.from("expenses").select("amount, currency, date").eq("project_id", p.id),
+          supabase.from("investments").select("amount, currency, date").eq("project_id", p.id),
         ]);
         return {
           ...p,
-          spent: (exps ?? []).reduce((s, e) => s + Number(e.amount), 0),
-          invested: (invs ?? []).reduce((s, e) => s + Number(e.amount), 0),
+          expenseRows: (exps as AmountRow[]) ?? [],
+          investmentRows: (invs as AmountRow[]) ?? [],
         };
       }),
     );
@@ -61,6 +65,13 @@ export function ProjectsList() {
     void init();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load uses stable supabase
   }, [supabase]);
+
+  const projectRows = useMemo(
+    () => items.flatMap((p) => [...p.expenseRows, ...p.investmentRows]),
+    [items],
+  );
+
+  useRowRates(projectRows);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -142,7 +153,7 @@ export function ProjectsList() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="p-target">Meta (R$)</Label>
+              <Label htmlFor="p-target">Meta ({mainCurrency})</Label>
               <Input
                 id="p-target"
                 inputMode="decimal"
@@ -180,7 +191,8 @@ export function ProjectsList() {
       ) : (
         <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
           {items.map((p) => {
-            const reserved = p.invested;
+            const spent = sum(p.expenseRows).total;
+            const reserved = sum(p.investmentRows).total;
             const progressBase = p.target_amount ? Number(p.target_amount) : null;
             const pct = progressBase ? Math.min(100, (reserved / progressBase) * 100) : null;
             return (
@@ -195,7 +207,7 @@ export function ProjectsList() {
                         {p.emoji} {p.name}
                       </p>
                       <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                        Gasto {formatCurrency(p.spent)} · Reservado {formatCurrency(p.invested)}
+                        Gasto {format(spent)} · Reservado {format(reserved)}
                         {p.target_date ? ` · até ${formatDateBR(p.target_date)}` : ""}
                       </p>
                     </div>
@@ -206,7 +218,7 @@ export function ProjectsList() {
                   {progressBase && (
                     <div className="mt-3">
                       <div className="mb-1 flex justify-between text-xs text-[var(--fg-muted)]">
-                        <span>Meta {formatCurrency(progressBase)}</span>
+                        <span>Meta {format(progressBase)}</span>
                         <span>{pct?.toFixed(0)}%</span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
@@ -258,10 +270,20 @@ export function ProjectsList() {
 
 export function ProjectDetail({ projectId }: { projectId: string }) {
   const supabase = useMemo(() => createClient(), []);
+  const { format } = useCurrency();
   const [project, setProject] = useState<Project | null>(null);
   const [timeline, setTimeline] = useState<
-    { id: string; kind: "expense" | "investment"; date: string; amount: number; label: string }[]
+    {
+      id: string;
+      kind: "expense" | "investment";
+      date: string;
+      amount: number;
+      currency: string;
+      label: string;
+    }[]
   >([]);
+
+  useRowRates(timeline);
 
   useEffect(() => {
     async function load() {
@@ -272,12 +294,12 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       const [{ data: exps }, { data: invs }] = await Promise.all([
         supabase
           .from("expenses")
-          .select("id, date, amount, description, categories(name, icon)")
+          .select("id, date, amount, currency, description, categories(name, icon)")
           .eq("project_id", projectId)
           .order("date", { ascending: false }),
         supabase
           .from("investments")
-          .select("id, date, amount, vehicle, description")
+          .select("id, date, amount, currency, vehicle, description")
           .eq("project_id", projectId)
           .order("date", { ascending: false }),
       ]);
@@ -286,6 +308,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         id: string;
         date: string;
         amount: number;
+        currency: string;
         description: string | null;
         categories: { name: string; icon: string } | { name: string; icon: string }[] | null;
       };
@@ -295,6 +318,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         id: string;
         date: string;
         amount: number;
+        currency: string;
         vehicle: string;
         description: string | null;
       }>;
@@ -307,6 +331,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
             kind: "expense" as const,
             date: e.date,
             amount: Number(e.amount),
+            currency: e.currency,
             label: e.description || `${cat?.icon ?? ""} ${cat?.name ?? "Gasto"}`,
           };
         }),
@@ -315,6 +340,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           kind: "investment" as const,
           date: i.date,
           amount: Number(i.amount),
+          currency: i.currency,
           label: i.description || i.vehicle,
         })),
       ].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -339,7 +365,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         </h1>
         {project.target_amount && (
           <p className="text-sm text-[var(--fg-muted)]">
-            Meta {formatCurrency(project.target_amount)}
+            Meta {format(project.target_amount)}
             {project.target_date ? ` · ${formatDateBR(project.target_date)}` : ""}
           </p>
         )}
@@ -363,13 +389,14 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                   <p className="truncate text-sm text-[var(--fg)]">{t.label}</p>
                   <p className="text-xs text-[var(--fg-muted)]">{formatDateBR(t.date)}</p>
                 </div>
-                <p
-                  className={`tabular-nums text-sm font-semibold ${
+                <Amount
+                  value={t.amount}
+                  currency={t.currency}
+                  date={t.date}
+                  className={`text-right tabular-nums text-sm font-semibold ${
                     t.kind === "investment" ? "text-sky-400" : "text-[var(--fg)]"
                   }`}
-                >
-                  {formatCurrency(t.amount)}
-                </p>
+                />
               </li>
             ))}
           </ul>
