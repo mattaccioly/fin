@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0c0f14;
+  --surface: #141a22;
+  --surface-2: #1c2430;
+  --surface-3: #243040;
+  --border: #2a3545;
+  --fg: #e8eef6;
+  --fg-muted: #8b9bb0;
+  --accent: #3ddea8;
+  --accent-fg: #062218;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Segoe UI", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  min-height: 100dvh;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(61, 222, 168, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(56, 120, 200, 0.08), transparent);
+}
+
+.safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
