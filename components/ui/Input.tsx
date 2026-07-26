@@ -19,8 +19,13 @@ export function Select({
   children,
   ...props
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  // Drop default sizing when the caller sets an explicit width/height utility.
+  const hasWidth = /\b(w-|min-w-|max-w-)/.test(className);
+  const hasHeight = /\b(h-|min-h-|max-h-)/.test(className);
+  const base = hasWidth ? fieldClass.replace(/\bw-full\b/, "").trim() : fieldClass;
+  const height = hasHeight ? "" : "h-10";
   return (
-    <select className={`${fieldClass} h-10 ${className}`} {...props}>
+    <select className={`${base} ${height} ${className}`.replace(/\s+/g, " ").trim()} {...props}>
       {children}
     </select>
   );

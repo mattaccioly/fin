@@ -212,7 +212,11 @@ export function ExpenseForm({
 
     setSaving(false);
     if (error) {
-      toast.error("Não foi possível salvar");
+      const hint =
+        error.message?.includes("paid_from_reserve") || error.code === "PGRST204"
+          ? "Coluna de reserva ainda não existe no banco — rode a migration 20260727100000."
+          : error.message;
+      toast.error(hint ? `Não foi possível salvar: ${hint}` : "Não foi possível salvar");
       return;
     }
 
@@ -237,8 +241,8 @@ export function ExpenseForm({
     >
       <div>
         <Label htmlFor="amount">Valor</Label>
-        <div className="flex items-stretch gap-2">
-          <div className="relative flex-1">
+        <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-stretch gap-2">
+          <div className="relative min-w-0">
             <span
               className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[var(--fg-muted)] ${
                 symbol.length > 2 ? "text-xl" : ""
@@ -253,8 +257,8 @@ export function ExpenseForm({
               placeholder="0,00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className={`w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-4 pr-3 text-4xl font-semibold tabular-nums text-[var(--fg)] outline-none transition placeholder:text-[var(--fg-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)] ${
-                symbol.length > 2 ? "pl-20" : "pl-14"
+              className={`w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg)] py-4 pr-3 text-4xl font-semibold tabular-nums text-[var(--fg)] outline-none transition placeholder:text-[var(--fg-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)] ${
+                symbol.length > 2 ? "pl-16" : "pl-12"
               }`}
               autoFocus={autoFocusAmount}
             />
@@ -266,7 +270,7 @@ export function ExpenseForm({
               currencyTouched.current = true;
               setCurrency(next);
             }}
-            className="h-auto w-24 shrink-0 font-medium"
+            className="h-full w-full shrink-0 px-1.5 text-center text-sm font-medium"
           />
         </div>
         {currency !== mainCurrency && (
