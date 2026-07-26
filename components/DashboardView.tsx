@@ -9,8 +9,9 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/EmptyState";
+import { LessonsReceivableWidget } from "@/components/LessonsReceivableWidget";
+import { MonthNav } from "@/components/MonthNav";
 import { useMonth } from "@/components/MonthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { budgetStatus, momDelta, summarizeMonth } from "@/lib/dashboard";
@@ -19,7 +20,6 @@ import {
   addMonths,
   formatCurrency,
   formatDateBR,
-  formatMonthYear,
   monthRange,
 } from "@/lib/format";
 import {
@@ -185,20 +185,28 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between gap-2 lg:justify-start lg:gap-4">
-        <Button variant="ghost" size="sm" onClick={() => go(-1)} aria-label="Mês anterior">
-          ←
-        </Button>
-        <h1 className="text-lg font-semibold text-[var(--fg)] lg:min-w-56 lg:text-center lg:text-xl">
-          {formatMonthYear(year, month)}
-        </h1>
-        <Button variant="ghost" size="sm" onClick={() => go(1)} aria-label="Próximo mês">
-          →
-        </Button>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-[var(--fg-muted)]">Visão do mês</p>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--fg)] lg:text-2xl">
+            Dashboard
+          </h1>
+        </div>
+        <MonthNav year={year} month={month} onGo={go} />
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        <StatCard label="Entradas" value={summary.incomes} delta={incomeDelta} positiveGood />
+        <StatCard
+          label="Entradas"
+          value={summary.incomes}
+          delta={incomeDelta}
+          positiveGood
+          subtitle={
+            summary.teachingIncomes > 0
+              ? `Aulas ${formatCurrency(summary.teachingIncomes)}`
+              : undefined
+          }
+        />
         <StatCard label="Saídas" value={summary.outflows} delta={outflowDelta} positiveGood={false} />
         <StatCard label="Investido" value={summary.invested} />
         <StatCard
@@ -209,6 +217,10 @@ export function DashboardView() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <section className="space-y-3 lg:col-span-2 xl:col-span-1">
+          <LessonsReceivableWidget />
+        </section>
+
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-[var(--fg-muted)]">Gastos por categoria</h2>
           {chartData.length === 0 ? (
@@ -365,12 +377,14 @@ function StatCard({
   delta,
   positiveGood,
   highlight,
+  subtitle,
 }: {
   label: string;
   value: number;
   delta?: { pct: number | null; up: boolean | null };
   positiveGood?: boolean;
   highlight?: "good" | "bad";
+  subtitle?: string;
 }) {
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 lg:p-4">
@@ -378,22 +392,25 @@ function StatCard({
       <p
         className={`mt-1 text-lg font-semibold tabular-nums lg:text-xl ${
           highlight === "good"
-            ? "text-emerald-400"
+            ? "text-[var(--positive)]"
             : highlight === "bad"
-              ? "text-red-400"
+              ? "text-[var(--negative)]"
               : "text-[var(--fg)]"
         }`}
       >
         {formatCurrency(value)}
       </p>
+      {subtitle ? (
+        <p className="mt-0.5 text-xs text-[var(--fg-muted)]">{subtitle}</p>
+      ) : null}
       {delta && delta.pct !== null && (
         <p
           className={`mt-0.5 text-xs ${
             delta.up === null
               ? "text-[var(--fg-muted)]"
               : (delta.up && positiveGood) || (!delta.up && !positiveGood)
-                ? "text-emerald-400"
-                : "text-red-400"
+                ? "text-[var(--positive)]"
+                : "text-[var(--negative)]"
           }`}
         >
           {delta.up === null ? "→" : delta.up ? "↑" : "↓"}{" "}
@@ -460,9 +477,9 @@ function BudgetBars({ year, month }: { year: number; month: number }) {
   }
 
   const colors = {
-    green: "bg-emerald-500",
-    yellow: "bg-amber-400",
-    red: "bg-red-500",
+    green: "bg-[var(--positive)]",
+    yellow: "bg-[var(--warning)]",
+    red: "bg-[var(--negative)]",
   };
 
   return (

@@ -222,7 +222,7 @@ function ExpenseList({
             <button
               type="button"
               onClick={() => onDelete(exp.id)}
-              className="rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+              className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] hover:bg-[var(--negative-soft)]"
             >
               Excluir
             </button>

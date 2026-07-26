@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +10,7 @@ import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { createClient } from "@/lib/supabase/client";
+import { onDataChanged } from "@/lib/events";
 import { formatCurrency, formatDateBR, parseAmountInput, toISODate } from "@/lib/format";
 import { INCOME_SOURCE_LABELS, type Income, type IncomeSource } from "@/lib/types";
 
@@ -47,6 +49,11 @@ export function IncomesView() {
     void init();
   }, [supabase, load]);
 
+  useEffect(() => {
+    if (!userId) return;
+    return onDataChanged(() => void load(userId));
+  }, [userId, load]);
+
   async function repeatLastMonth() {
     if (!userId) return;
     setRepeating(true);
@@ -62,6 +69,7 @@ export function IncomesView() {
       .select("*")
       .eq("user_id", userId)
       .eq("is_recurring", true)
+      .neq("source", "teaching")
       .gte("date", start)
       .lte("date", end);
 
@@ -91,9 +99,13 @@ export function IncomesView() {
     await load(userId);
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(item: Income) {
+    if (item.source === "teaching") {
+      toast.error("Entradas de aulas só podem ser desfeitas em Aulas");
+      return;
+    }
     if (!userId || !confirm("Excluir entrada?")) return;
-    const { error } = await supabase.from("incomes").delete().eq("id", id);
+    const { error } = await supabase.from("incomes").delete().eq("id", item.id);
     if (error) {
       toast.error("Erro ao excluir");
       return;
@@ -103,6 +115,7 @@ export function IncomesView() {
   }
 
   function openEdit(item: Income) {
+    if (item.source === "teaching") return;
     setEditing(item);
     setFormOpen(true);
   }
@@ -158,7 +171,7 @@ export function IncomesView() {
       align: "right",
       sortValue: (r) => Number(r.amount),
       render: (r) => (
-        <span className="whitespace-nowrap font-semibold tabular-nums text-emerald-400">
+        <span className="whitespace-nowrap font-semibold tabular-nums text-[var(--positive)]">
           {formatCurrency(r.amount)}
         </span>
       ),
@@ -167,18 +180,27 @@ export function IncomesView() {
       key: "actions",
       header: "",
       align: "right",
-      render: (r) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleDelete(r.id);
-          }}
-          className="rounded-lg px-2 py-1 text-xs text-red-400 transition hover:bg-red-500/10"
-        >
-          Excluir
-        </button>
-      ),
+      render: (r) =>
+        r.source === "teaching" ? (
+          <Link
+            href={`/aulas?income=${r.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-lg px-2 py-1 text-xs text-[var(--accent)] hover:underline"
+          >
+            Ver aulas
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleDelete(r);
+            }}
+            className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] transition hover:bg-[var(--negative-soft)]"
+          >
+            Excluir
+          </button>
+        ),
     },
   ];
 
@@ -232,23 +254,34 @@ export function IncomesView() {
                     {item.description ? ` · ${item.description}` : ""}
                   </p>
                 </div>
-                <p className="tabular-nums text-sm font-semibold text-emerald-400">
+                <p className="tabular-nums text-sm font-semibold text-[var(--positive)]">
                   {formatCurrency(item.amount)}
                 </p>
-                <button
-                  type="button"
-                  className="rounded-lg px-2 py-1 text-xs text-[var(--fg-muted)] hover:bg-[var(--surface-2)]"
-                  onClick={() => openEdit(item)}
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
-                  onClick={() => void handleDelete(item.id)}
-                >
-                  Excluir
-                </button>
+                {item.source === "teaching" ? (
+                  <Link
+                    href={`/aulas?income=${item.id}`}
+                    className="rounded-lg px-2 py-1 text-xs text-[var(--accent)] hover:underline"
+                  >
+                    Ver aulas
+                  </Link>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-1 text-xs text-[var(--fg-muted)] hover:bg-[var(--surface-2)]"
+                      onClick={() => openEdit(item)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] hover:bg-[var(--negative-soft)]"
+                      onClick={() => void handleDelete(item)}
+                    >
+                      Excluir
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -348,11 +381,13 @@ function IncomeForm({
           value={source}
           onChange={(e) => setSource(e.target.value as IncomeSource)}
         >
-          {(Object.keys(INCOME_SOURCE_LABELS) as IncomeSource[]).map((s) => (
-            <option key={s} value={s}>
-              {INCOME_SOURCE_LABELS[s]}
-            </option>
-          ))}
+          {(Object.keys(INCOME_SOURCE_LABELS) as IncomeSource[])
+            .filter((s) => s !== "teaching")
+            .map((s) => (
+              <option key={s} value={s}>
+                {INCOME_SOURCE_LABELS[s]}
+              </option>
+            ))}
         </Select>
       </div>
       <div className="grid grid-cols-2 gap-3">

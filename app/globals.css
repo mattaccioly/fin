@@ -1,29 +1,74 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0c0f14;
-  --surface: #141a22;
-  --surface-2: #1c2430;
-  --surface-3: #243040;
-  --border: #2a3545;
-  --fg: #e8eef6;
-  --fg-muted: #8b9bb0;
-  --accent: #3ddea8;
-  --accent-fg: #062218;
+  color-scheme: light dark;
+
+  --bg: light-dark(#fafafa, #0b0c0e);
+  --surface: light-dark(#ffffff, #131418);
+  --surface-2: light-dark(#f4f4f5, #1a1c21);
+  --surface-3: light-dark(#e9eaec, #23262c);
+
+  --border: light-dark(#e6e7e9, #24272d);
+  --border-strong: light-dark(#d3d5d8, #32363e);
+
+  --fg: light-dark(#17181c, #eceef2);
+  --fg-muted: light-dark(#6a6d76, #969aa5);
+
+  --accent: light-dark(#0f9d76, #3ddea8);
+  --accent-fg: light-dark(#ffffff, #052b1e);
+
+  --positive: light-dark(#0f9d76, #34d399);
+  --negative: light-dark(#dc2626, #f87171);
+  --warning: light-dark(#b45309, #fbbf24);
+
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --positive-soft: color-mix(in srgb, var(--positive) 12%, transparent);
+  --negative-soft: color-mix(in srgb, var(--negative) 12%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
+
+  --ring: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  /* light-dark() only accepts colors, so shadows are composed from color tokens */
+  --shadow-color: light-dark(rgb(16 18 23 / 0.07), rgb(0 0 0 / 0.5));
+  --shadow-color-strong: light-dark(rgb(16 18 23 / 0.18), rgb(0 0 0 / 0.6));
+  --shadow-card: 0 1px 2px var(--shadow-color);
+  --shadow-overlay: 0 24px 48px -12px var(--shadow-color-strong);
 }
 
-html {
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
   color-scheme: dark;
+}
+
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: "Segoe UI", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    ui-sans-serif, system-ui, sans-serif;
   min-height: 100dvh;
-  background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(61, 222, 168, 0.12), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(56, 120, 200, 0.08), transparent);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Keep numeric columns visually aligned across the app */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 .safe-bottom {

@@ -149,7 +149,7 @@ export function FixedCommitmentsView() {
         <span
           className={`rounded-lg px-2 py-0.5 text-xs ${
             r.active
-              ? "bg-emerald-500/15 text-emerald-400"
+              ? "bg-[var(--positive-soft)] text-[var(--positive)]"
               : "bg-[var(--surface-2)] text-[var(--fg-muted)]"
           }`}
         >
@@ -190,7 +190,7 @@ export function FixedCommitmentsView() {
               e.stopPropagation();
               void deleteFixed(r.id);
             }}
-            className="rounded-lg px-2 py-1 text-xs text-red-400 transition hover:bg-red-500/10"
+            className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] transition hover:bg-[var(--negative-soft)]"
           >
             Excluir
           </button>
@@ -280,7 +280,7 @@ export function FixedCommitmentsView() {
               e.stopPropagation();
               void deleteDebt(r.id);
             }}
-            className="rounded-lg px-2 py-1 text-xs text-red-400 transition hover:bg-red-500/10"
+            className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] transition hover:bg-[var(--negative-soft)]"
           >
             Excluir
           </button>
@@ -365,7 +365,7 @@ export function FixedCommitmentsView() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                    className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] hover:bg-[var(--negative-soft)]"
                     onClick={() => void deleteFixed(item.id)}
                   >
                     Excluir

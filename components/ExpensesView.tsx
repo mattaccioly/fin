@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { DataTable, type Column } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpenseForm } from "@/components/ExpenseForm";
+import { MonthNav } from "@/components/MonthNav";
 import { PageHeader } from "@/components/PageHeader";
 import { useMonth } from "@/components/MonthProvider";
 import { createClient } from "@/lib/supabase/client";
@@ -15,7 +16,6 @@ import { onDataChanged } from "@/lib/events";
 import {
   formatCurrency,
   formatDateBR,
-  formatMonthYear,
   monthRange,
 } from "@/lib/format";
 import {
@@ -209,7 +209,7 @@ export function ExpensesView() {
             e.stopPropagation();
             void handleDelete(r.id);
           }}
-          className="rounded-lg px-2 py-1 text-xs text-red-400 transition hover:bg-red-500/10"
+          className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] transition hover:bg-[var(--negative-soft)]"
         >
           Excluir
         </button>
@@ -232,17 +232,7 @@ export function ExpensesView() {
       <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 lg:p-4">
         <div className="flex flex-wrap items-center gap-2">
           {!customRange ? (
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => go(-1)} aria-label="Mês anterior">
-                ←
-              </Button>
-              <span className="min-w-36 text-center text-sm font-medium text-[var(--fg)]">
-                {formatMonthYear(year, month)}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => go(1)} aria-label="Próximo mês">
-                →
-              </Button>
-            </div>
+            <MonthNav year={year} month={month} onGo={go} />
           ) : (
             <div className="flex items-center gap-2">
               <Input
@@ -314,8 +304,8 @@ export function ExpensesView() {
                   onClick={() => toggleCategory(c.id)}
                   className={`rounded-xl border px-2.5 py-1 text-xs transition ${
                     active
-                      ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--fg)]"
-                      : "border-[var(--border)] bg-[var(--bg)] text-[var(--fg-muted)] hover:border-[var(--fg-muted)]"
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)]"
+                      : "border-[var(--border)] bg-[var(--bg)] text-[var(--fg-muted)] hover:border-[var(--border-strong)]"
                   }`}
                 >
                   {c.icon} {c.name}
@@ -388,7 +378,7 @@ export function ExpensesView() {
                     <button
                       type="button"
                       onClick={() => void handleDelete(exp.id)}
-                      className="rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                      className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] hover:bg-[var(--negative-soft)]"
                     >
                       Excluir
                     </button>

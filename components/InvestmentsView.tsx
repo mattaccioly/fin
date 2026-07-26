@@ -163,7 +163,7 @@ export function InvestmentsView() {
             e.stopPropagation();
             void handleDelete(r.id);
           }}
-          className="rounded-lg px-2 py-1 text-xs text-red-400 transition hover:bg-red-500/10"
+          className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] transition hover:bg-[var(--negative-soft)]"
         >
           Excluir
         </button>
@@ -241,7 +241,7 @@ export function InvestmentsView() {
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                  className="rounded-lg px-2 py-1 text-xs text-[var(--negative)] hover:bg-[var(--negative-soft)]"
                   onClick={() => void handleDelete(item.id)}
                 >
                   Excluir

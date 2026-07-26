@@ -151,7 +151,7 @@ export function ExpenseForm({
             placeholder="0,00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-4 pl-14 pr-3 text-4xl font-semibold tabular-nums text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:border-[var(--accent)]"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-4 pl-14 pr-3 text-4xl font-semibold tabular-nums text-[var(--fg)] outline-none transition placeholder:text-[var(--fg-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]"
             autoFocus={autoFocusAmount}
           />
         </div>
@@ -169,8 +169,8 @@ export function ExpenseForm({
                 onClick={() => setCategoryId(cat.id)}
                 className={`flex flex-col items-center gap-1 rounded-xl border px-1 py-2.5 text-center transition ${
                   active
-                    ? "border-[var(--accent)] bg-[var(--accent)]/15"
-                    : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--fg-muted)]"
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                    : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]"
                 }`}
               >
                 <span className="text-xl leading-none">{cat.icon}</span>
@@ -193,7 +193,7 @@ export function ExpenseForm({
               onClick={() => setPaymentMethod(m)}
               className={`rounded-xl border px-2 py-2 text-xs font-medium transition ${
                 paymentMethod === m
-                  ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--fg)]"
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)]"
                   : "border-[var(--border)] bg-[var(--bg)] text-[var(--fg-muted)]"
               }`}
             >

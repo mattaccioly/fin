@@ -57,14 +57,14 @@ export function DataTable<T>({
     <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--fg-muted)]">
+          <tr className="border-b border-[var(--border)] bg-[var(--surface-2)]/60 text-left text-xs uppercase tracking-wide text-[var(--fg-muted)]">
             {columns.map((col) => {
               const sortable = !!col.sortValue;
               const active = sort?.key === col.key;
               return (
                 <th
                   key={col.key}
-                  className={`px-3 py-2.5 font-medium ${
+                  className={`px-4 py-3 font-medium ${
                     col.align === "right" ? "text-right" : ""
                   } ${col.className ?? ""}`}
                 >
@@ -72,12 +72,15 @@ export function DataTable<T>({
                     <button
                       type="button"
                       onClick={() => toggleSort(col.key)}
-                      className={`inline-flex items-center gap-1 transition hover:text-[var(--fg)] ${
-                        active ? "text-[var(--accent)]" : ""
+                      className={`inline-flex items-center gap-1 uppercase tracking-wide transition hover:text-[var(--fg)] ${
+                        active ? "text-[var(--fg)]" : ""
                       }`}
                     >
                       {col.header}
-                      <span aria-hidden className="text-[10px]">
+                      <span
+                        aria-hidden
+                        className={`text-[9px] ${active ? "text-[var(--accent)]" : "opacity-40"}`}
+                      >
                         {active ? (sort!.dir === "asc" ? "▲" : "▼") : "↕"}
                       </span>
                     </button>
@@ -96,14 +99,14 @@ export function DataTable<T>({
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               className={
                 onRowClick
-                  ? "cursor-pointer transition hover:bg-[var(--surface-2)]"
+                  ? "cursor-pointer transition-colors hover:bg-[var(--surface-2)]"
                   : undefined
               }
             >
               {columns.map((col) => (
                 <td
                   key={col.key}
-                  className={`px-3 py-2.5 ${
+                  className={`px-4 py-3 ${
                     col.align === "right" ? "text-right" : ""
                   } ${col.className ?? ""}`}
                 >
@@ -115,11 +118,11 @@ export function DataTable<T>({
         </tbody>
         {footer && (
           <tfoot>
-            <tr className="border-t border-[var(--border)] bg-[var(--surface-2)]/50 text-sm font-semibold text-[var(--fg)]">
+            <tr className="border-t border-[var(--border)] bg-[var(--surface-2)]/60 text-sm font-semibold text-[var(--fg)]">
               {columns.map((col) => (
                 <td
                   key={col.key}
-                  className={`px-3 py-2.5 ${
+                  className={`px-4 py-3 ${
                     col.align === "right" ? "text-right" : ""
                   }`}
                 >

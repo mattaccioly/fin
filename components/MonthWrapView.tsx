@@ -224,7 +224,7 @@ export function MonthWrapView() {
             {seals.map((s) => (
               <li
                 key={s}
-                className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-sm text-emerald-300"
+                className="rounded-lg bg-[var(--positive-soft)] px-2.5 py-1 text-sm text-[var(--positive)]"
               >
                 ✓ {s}
               </li>
@@ -255,9 +255,9 @@ function Row({
       <span
         className={`tabular-nums font-medium ${
           accent === "good"
-            ? "text-emerald-400"
+            ? "text-[var(--positive)]"
             : accent === "bad"
-              ? "text-red-400"
+              ? "text-[var(--negative)]"
               : "text-[var(--fg)]"
         }`}
       >

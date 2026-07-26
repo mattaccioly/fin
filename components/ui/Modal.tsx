@@ -36,19 +36,32 @@ export function Modal({
       aria-label={title}
     >
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-[var(--fg)]/20 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <div className="relative z-10 max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xl lg:max-w-lg lg:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-[var(--fg)]">{title}</h2>
+      <div className="relative z-10 max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-overlay)] lg:max-w-lg lg:rounded-2xl">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold tracking-tight text-[var(--fg)]">
+            {title}
+          </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-lg px-2 py-1 text-[var(--fg-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+            className="-mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-[var(--fg-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
           >
-            ✕
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
           </button>
         </div>
         {children}

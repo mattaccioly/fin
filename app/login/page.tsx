@@ -29,14 +29,16 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-10">
+    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-10">
       <div className="mb-8 text-center">
-        <p className="text-4xl font-semibold tracking-tight text-[var(--accent)]">Fin</p>
-        <p className="mt-2 text-sm text-[var(--fg-muted)]">Suas finanças, sem fricção</p>
+        <p className="text-3xl font-semibold tracking-tight text-[var(--fg)]">Fin</p>
+        <p className="mt-1.5 text-sm text-[var(--fg-muted)]">
+          Suas finanças, sem fricção
+        </p>
       </div>
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5"
+        className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6"
       >
         <div>
           <Label htmlFor="email">E-mail</Label>
@@ -60,7 +62,7 @@ export default function LoginPage() {
             required
           />
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--negative)]">{error}</p>}
         <Button type="submit" size="lg" className="w-full" disabled={loading}>
           {loading ? "Entrando…" : "Entrar"}
         </Button>

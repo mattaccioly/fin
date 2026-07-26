@@ -233,7 +233,7 @@ export function ProjectsList() {
                   {p.status === "active" && (
                     <button
                       type="button"
-                      className="text-xs text-emerald-400"
+                      className="text-xs text-[var(--positive)]"
                       onClick={() => setStatus(p.id, "completed")}
                     >
                       Concluir

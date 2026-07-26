@@ -9,6 +9,17 @@ export type PaymentMethod = "pix" | "debit" | "credit" | "cash";
 
 export type ProjectStatus = "active" | "completed" | "archived";
 
+export type BillingMode = "per_class" | "monthly";
+
+export type LessonStatus =
+  | "scheduled"
+  | "given"
+  | "cancelled_by_student"
+  | "cancelled_by_me"
+  | "rescheduled";
+
+export type LessonPaymentStatus = "pending" | "paid" | "not_billable";
+
 export type Category = {
   id: string;
   user_id: string;
@@ -98,6 +109,37 @@ export type Investment = {
   projects?: Pick<Project, "id" | "name" | "emoji"> | null;
 };
 
+export type Student = {
+  id: string;
+  user_id: string;
+  name: string;
+  financial_guardian: string;
+  billing_mode: BillingMode;
+  default_rate: number;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Lesson = {
+  id: string;
+  user_id: string;
+  date: string;
+  student_id: string;
+  status: LessonStatus;
+  amount: number;
+  payment_status: LessonPaymentStatus;
+  payment_date: string | null;
+  income_id: string | null;
+  created_at: string;
+  updated_at: string;
+  students?: Pick<
+    Student,
+    "id" | "name" | "financial_guardian" | "billing_mode" | "default_rate" | "active"
+  > | null;
+};
+
 export const INCOME_SOURCE_LABELS: Record<IncomeSource, string> = {
   salary: "Salário",
   capes_scholarship: "Bolsa CAPES",
@@ -111,6 +153,25 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   debit: "Débito",
   credit: "Crédito",
   cash: "Dinheiro",
+};
+
+export const BILLING_MODE_LABELS: Record<BillingMode, string> = {
+  per_class: "Por aula",
+  monthly: "Mensal",
+};
+
+export const LESSON_STATUS_LABELS: Record<LessonStatus, string> = {
+  scheduled: "Agendada",
+  given: "Dada",
+  cancelled_by_student: "Cancelada (aluno)",
+  cancelled_by_me: "Cancelada (eu)",
+  rescheduled: "Remarcada",
+};
+
+export const LESSON_PAYMENT_STATUS_LABELS: Record<LessonPaymentStatus, string> = {
+  pending: "A receber",
+  paid: "Pago",
+  not_billable: "Não cobrável",
 };
 
 export const DEFAULT_CATEGORIES: Omit<

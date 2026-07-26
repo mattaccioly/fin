@@ -4,6 +4,7 @@ import { percentChange } from "@/lib/format";
 
 export type MonthSummary = {
   incomes: number;
+  teachingIncomes: number;
   variableExpenses: number;
   fixedCosts: number;
   installments: number;
@@ -27,6 +28,9 @@ export function summarizeMonth(params: {
   const { year, month, incomes, expenses, fixedCosts, debts, investments, categories } = params;
 
   const incomeTotal = incomes.reduce((s, i) => s + Number(i.amount), 0);
+  const teachingIncomes = incomes
+    .filter((i) => i.source === "teaching")
+    .reduce((s, i) => s + Number(i.amount), 0);
   const variable = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const fixed = fixedCosts.filter((f) => f.active).reduce((s, f) => s + Number(f.amount), 0);
   const installments = committedInstallments(debts, year, month);
@@ -47,6 +51,7 @@ export function summarizeMonth(params: {
 
   return {
     incomes: incomeTotal,
+    teachingIncomes,
     variableExpenses: variable,
     fixedCosts: fixed,
     installments,
