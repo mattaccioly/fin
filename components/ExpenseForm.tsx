@@ -5,12 +5,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
 import { CurrencySelect } from "@/components/CurrencySelect";
-import { useCurrency } from "@/components/CurrencyProvider";
+import { useCurrency, useRowRates } from "@/components/CurrencyProvider";
 import { ensureCategories } from "@/lib/categories";
 import { CURRENCY_SYMBOLS, toCurrencyCode, type CurrencyCode } from "@/lib/currencies";
 import { emitDataChanged } from "@/lib/events";
+import type { AmountRow } from "@/lib/fx";
 import { createClient } from "@/lib/supabase/client";
 import { formatDateBR, parseAmountInput, toISODate } from "@/lib/format";
+import { projectReserve } from "@/lib/reserves";
 import {
   PAYMENT_METHOD_LABELS,
   type Category,
@@ -29,6 +31,7 @@ export type EditableExpense = Pick<
   | "description"
   | "date"
   | "project_id"
+  | "paid_from_reserve"
 >;
 
 export function ExpenseForm({
@@ -45,7 +48,7 @@ export function ExpenseForm({
   frameless?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
-  const { mainCurrency } = useCurrency();
+  const { mainCurrency, sum, format, convert } = useCurrency();
   const [userId, setUserId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -58,6 +61,11 @@ export function ExpenseForm({
   const [date, setDate] = useState(toISODate());
   const [linkProject, setLinkProject] = useState(false);
   const [projectId, setProjectId] = useState("");
+  const [paidFromReserve, setPaidFromReserve] = useState(false);
+  const [investmentRows, setInvestmentRows] = useState<AmountRow[]>([]);
+  const [reserveExpenseRows, setReserveExpenseRows] = useState<(AmountRow & { id?: string })[]>(
+    [],
+  );
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -102,11 +110,71 @@ export function ExpenseForm({
     setDate(editing.date);
     setLinkProject(!!editing.project_id);
     setProjectId(editing.project_id ?? "");
+    setPaidFromReserve(!!editing.paid_from_reserve);
   }, [editing, mainCurrency]);
+
+  useEffect(() => {
+    if (!linkProject || !projectId) {
+      setInvestmentRows([]);
+      setReserveExpenseRows([]);
+      if (!linkProject) setPaidFromReserve(false);
+      return;
+    }
+
+    let cancelled = false;
+    async function loadReserve() {
+      const [{ data: invs }, { data: exps }] = await Promise.all([
+        supabase.from("investments").select("amount, currency, date").eq("project_id", projectId),
+        supabase
+          .from("expenses")
+          .select("id, amount, currency, date, paid_from_reserve")
+          .eq("project_id", projectId)
+          .eq("paid_from_reserve", true),
+      ]);
+      if (cancelled) return;
+      setInvestmentRows((invs as AmountRow[]) ?? []);
+      setReserveExpenseRows(
+        ((exps as (AmountRow & { id: string; paid_from_reserve: boolean })[]) ?? []).filter(
+          (e) => !editing || e.id !== editing.id,
+        ),
+      );
+    }
+    void loadReserve();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, linkProject, projectId, editing]);
+
+  const reserveRows = useMemo(
+    () => [...investmentRows, ...reserveExpenseRows],
+    [investmentRows, reserveExpenseRows],
+  );
+  useRowRates(reserveRows);
+
+  const reserve = useMemo(() => {
+    const reservedTotal = sum(investmentRows).total;
+    const usedTotal = sum(reserveExpenseRows).total;
+    return projectReserve({ reservedTotal, usedTotal });
+  }, [investmentRows, reserveExpenseRows, sum]);
+
+  const hasReserve = reserve.reserved > 0;
+  const parsedAmount = parseAmountInput(amount);
+  const expenseInMain =
+    parsedAmount === null
+      ? null
+      : currency === mainCurrency
+        ? parsedAmount
+        : convert(parsedAmount, currency, date);
+
+  const exceedsReserve =
+    paidFromReserve &&
+    expenseInMain !== null &&
+    expenseInMain > reserve.available;
 
   function resetAfterSave() {
     setAmount("");
     setDescription("");
+    setPaidFromReserve(false);
     // keep category + payment for the next entry
   }
 
@@ -119,6 +187,12 @@ export function ExpenseForm({
       return;
     }
 
+    const linkedProjectId = linkProject && projectId ? projectId : null;
+    if (paidFromReserve && !linkedProjectId) {
+      toast.error("Selecione um projeto para usar a reserva");
+      return;
+    }
+
     setSaving(true);
     const payload = {
       user_id: userId,
@@ -128,7 +202,8 @@ export function ExpenseForm({
       payment_method: paymentMethod,
       description: description.trim() || null,
       date,
-      project_id: linkProject && projectId ? projectId : null,
+      project_id: linkedProjectId,
+      paid_from_reserve: !!linkedProjectId && paidFromReserve,
     };
 
     const { error } = editing
@@ -269,7 +344,13 @@ export function ExpenseForm({
             <input
               type="checkbox"
               checked={linkProject}
-              onChange={(e) => setLinkProject(e.target.checked)}
+              onChange={(e) => {
+                setLinkProject(e.target.checked);
+                if (!e.target.checked) {
+                  setProjectId("");
+                  setPaidFromReserve(false);
+                }
+              }}
               className="accent-[var(--accent)]"
             />
             Vincular a um projeto
@@ -283,6 +364,34 @@ export function ExpenseForm({
                 </option>
               ))}
             </Select>
+          )}
+          {linkProject && projectId && hasReserve && (
+            <div className="space-y-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+              <label className="flex items-center gap-2 text-sm text-[var(--fg)]">
+                <input
+                  type="checkbox"
+                  checked={paidFromReserve}
+                  onChange={(e) => setPaidFromReserve(e.target.checked)}
+                  className="accent-[var(--accent)]"
+                />
+                Pagar com valor reservado
+              </label>
+              <p className="text-xs text-[var(--fg-muted)]">
+                Disponível na reserva: {format(reserve.available)}
+                {reserve.used > 0 ? ` · já usado ${format(reserve.used)}` : ""}
+              </p>
+              {paidFromReserve && (
+                <p className="text-xs text-[var(--fg-muted)]">
+                  Não conta no saldo do mês nem nas categorias — só reduz a reserva do projeto.
+                </p>
+              )}
+              {exceedsReserve && (
+                <p className="text-xs text-[var(--warning)]">
+                  Valor acima da reserva disponível ({format(reserve.available)}). Você pode
+                  continuar, mas a reserva ficará negativa.
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -299,6 +408,7 @@ export function ExpenseForm({
             onClick={() => {
               setAmount("");
               setDescription("");
+              setPaidFromReserve(false);
               onCancelEdit();
             }}
           >

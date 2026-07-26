@@ -12,9 +12,13 @@ import { PageHeader } from "@/components/PageHeader";
 import { createClient } from "@/lib/supabase/client";
 import type { AmountRow } from "@/lib/fx";
 import { formatDateBR, parseAmountInput } from "@/lib/format";
+import { projectReserve, reserveFundedRows, type ReserveExpenseRow } from "@/lib/reserves";
 import type { Project, ProjectStatus } from "@/lib/types";
 
-type ProjectCard = Project & { expenseRows: AmountRow[]; investmentRows: AmountRow[] };
+type ProjectCard = Project & {
+  expenseRows: ReserveExpenseRow[];
+  investmentRows: AmountRow[];
+};
 
 export function ProjectsList() {
   const supabase = useMemo(() => createClient(), []);
@@ -40,12 +44,15 @@ export function ProjectsList() {
     const cards: ProjectCard[] = await Promise.all(
       list.map(async (p) => {
         const [{ data: exps }, { data: invs }] = await Promise.all([
-          supabase.from("expenses").select("amount, currency, date").eq("project_id", p.id),
+          supabase
+            .from("expenses")
+            .select("amount, currency, date, paid_from_reserve")
+            .eq("project_id", p.id),
           supabase.from("investments").select("amount, currency, date").eq("project_id", p.id),
         ]);
         return {
           ...p,
-          expenseRows: (exps as AmountRow[]) ?? [],
+          expenseRows: (exps as ReserveExpenseRow[]) ?? [],
           investmentRows: (invs as AmountRow[]) ?? [],
         };
       }),
@@ -193,6 +200,8 @@ export function ProjectsList() {
           {items.map((p) => {
             const spent = sum(p.expenseRows).total;
             const reserved = sum(p.investmentRows).total;
+            const used = sum(reserveFundedRows(p.expenseRows)).total;
+            const { available } = projectReserve({ reservedTotal: reserved, usedTotal: used });
             const progressBase = p.target_amount ? Number(p.target_amount) : null;
             const pct = progressBase ? Math.min(100, (reserved / progressBase) * 100) : null;
             return (
@@ -208,6 +217,7 @@ export function ProjectsList() {
                       </p>
                       <p className="mt-1 text-xs text-[var(--fg-muted)]">
                         Gasto {format(spent)} · Reservado {format(reserved)}
+                        {reserved > 0 ? ` · Disponível ${format(available)}` : ""}
                         {p.target_date ? ` · até ${formatDateBR(p.target_date)}` : ""}
                       </p>
                     </div>
@@ -270,7 +280,7 @@ export function ProjectsList() {
 
 export function ProjectDetail({ projectId }: { projectId: string }) {
   const supabase = useMemo(() => createClient(), []);
-  const { format } = useCurrency();
+  const { format, sum } = useCurrency();
   const [project, setProject] = useState<Project | null>(null);
   const [timeline, setTimeline] = useState<
     {
@@ -280,10 +290,13 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       amount: number;
       currency: string;
       label: string;
+      paidFromReserve?: boolean;
     }[]
   >([]);
+  const [investmentRows, setInvestmentRows] = useState<AmountRow[]>([]);
+  const [reserveExpenseRows, setReserveExpenseRows] = useState<AmountRow[]>([]);
 
-  useRowRates(timeline);
+  useRowRates([...timeline, ...investmentRows, ...reserveExpenseRows]);
 
   useEffect(() => {
     async function load() {
@@ -294,7 +307,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       const [{ data: exps }, { data: invs }] = await Promise.all([
         supabase
           .from("expenses")
-          .select("id, date, amount, currency, description, categories(name, icon)")
+          .select("id, date, amount, currency, description, paid_from_reserve, categories(name, icon)")
           .eq("project_id", projectId)
           .order("date", { ascending: false }),
         supabase
@@ -310,6 +323,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         amount: number;
         currency: string;
         description: string | null;
+        paid_from_reserve: boolean;
         categories: { name: string; icon: string } | { name: string; icon: string }[] | null;
       };
 
@@ -323,6 +337,15 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         description: string | null;
       }>;
 
+      setInvestmentRows(
+        invRows.map((i) => ({ amount: Number(i.amount), currency: i.currency, date: i.date })),
+      );
+      setReserveExpenseRows(
+        expRows
+          .filter((e) => e.paid_from_reserve)
+          .map((e) => ({ amount: Number(e.amount), currency: e.currency, date: e.date })),
+      );
+
       const rows = [
         ...expRows.map((e) => {
           const cat = Array.isArray(e.categories) ? e.categories[0] : e.categories;
@@ -333,6 +356,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
             amount: Number(e.amount),
             currency: e.currency,
             label: e.description || `${cat?.icon ?? ""} ${cat?.name ?? "Gasto"}`,
+            paidFromReserve: !!e.paid_from_reserve,
           };
         }),
         ...invRows.map((i) => ({
@@ -354,6 +378,10 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     return <p className="text-sm text-[var(--fg-muted)]">Carregando…</p>;
   }
 
+  const reserved = sum(investmentRows).total;
+  const used = sum(reserveExpenseRows).total;
+  const { available } = projectReserve({ reservedTotal: reserved, usedTotal: used });
+
   return (
     <div className="space-y-6">
       <div>
@@ -367,6 +395,12 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           <p className="text-sm text-[var(--fg-muted)]">
             Meta {format(project.target_amount)}
             {project.target_date ? ` · ${formatDateBR(project.target_date)}` : ""}
+          </p>
+        )}
+        {reserved > 0 && (
+          <p className="mt-1 text-sm text-[var(--fg-muted)]">
+            Reservado {format(reserved)} · Usado da reserva {format(used)} · Disponível{" "}
+            {format(available)}
           </p>
         )}
       </div>
@@ -387,7 +421,10 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-[var(--fg)]">{t.label}</p>
-                  <p className="text-xs text-[var(--fg-muted)]">{formatDateBR(t.date)}</p>
+                  <p className="text-xs text-[var(--fg-muted)]">
+                    {formatDateBR(t.date)}
+                    {t.paidFromReserve ? " · da reserva" : ""}
+                  </p>
                 </div>
                 <Amount
                   value={t.amount}

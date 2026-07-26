@@ -20,6 +20,7 @@ import { budgetStatus, momDelta, summarizeMonth } from "@/lib/dashboard";
 import { convertAmount, type AmountRow } from "@/lib/fx";
 import { onDataChanged } from "@/lib/events";
 import { addMonths, formatDateBR, monthRange } from "@/lib/format";
+import { projectReserve, reserveFundedRows, type ReserveExpenseRow } from "@/lib/reserves";
 import {
   PAYMENT_METHOD_LABELS,
   type Category,
@@ -32,7 +33,10 @@ import {
   type Project,
 } from "@/lib/types";
 
-type ProjectCard = Project & { expenseRows: AmountRow[]; investmentRows: AmountRow[] };
+type ProjectCard = Project & {
+  expenseRows: ReserveExpenseRow[];
+  investmentRows: AmountRow[];
+};
 
 type MonthData = {
   categories: Category[];
@@ -141,12 +145,15 @@ export function DashboardView() {
     const projCards: ProjectCard[] = await Promise.all(
       projList.map(async (p) => {
         const [{ data: exps }, { data: invs }] = await Promise.all([
-          supabase.from("expenses").select("amount, currency, date").eq("project_id", p.id),
+          supabase
+            .from("expenses")
+            .select("amount, currency, date, paid_from_reserve")
+            .eq("project_id", p.id),
           supabase.from("investments").select("amount, currency, date").eq("project_id", p.id),
         ]);
         return {
           ...p,
-          expenseRows: (exps as AmountRow[]) ?? [],
+          expenseRows: (exps as ReserveExpenseRow[]) ?? [],
           investmentRows: (invs as AmountRow[]) ?? [],
         };
       }),
@@ -274,6 +281,7 @@ export function DashboardView() {
           label="Saldo do mês"
           value={summary.balance}
           highlight={summary.balance >= 0 ? "good" : "bad"}
+          subtitle="após reservas"
         />
       </div>
 
@@ -361,8 +369,10 @@ export function DashboardView() {
               <ul className="space-y-2">
                 {data.projects.map((p) => {
                   const target = p.target_amount ? Number(p.target_amount) : null;
-                  const invested = sum(p.investmentRows).total;
-                  const pct = target ? Math.min(100, (invested / target) * 100) : null;
+                  const reserved = sum(p.investmentRows).total;
+                  const used = sum(reserveFundedRows(p.expenseRows)).total;
+                  const { available } = projectReserve({ reservedTotal: reserved, usedTotal: used });
+                  const pct = target ? Math.min(100, (reserved / target) * 100) : null;
                   return (
                     <li key={p.id}>
                       <Link
@@ -374,10 +384,15 @@ export function DashboardView() {
                             {p.emoji} {p.name}
                           </span>
                           <span className="tabular-nums text-xs text-[var(--fg-muted)]">
-                            {format(invested)}
+                            {format(reserved)}
                             {target ? ` / ${format(target)}` : ""}
                           </span>
                         </div>
+                        {reserved > 0 && (
+                          <p className="mt-1 text-xs text-[var(--fg-muted)]">
+                            Disponível na reserva {format(available)}
+                          </p>
+                        )}
                         {pct !== null && (
                           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-2)]">
                             <div
@@ -492,7 +507,9 @@ function BudgetBars({ year, month }: { year: number; month: number }) {
   const supabase = useMemo(() => createClient(), []);
   const { mainCurrency, rates, format } = useCurrency();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [expenses, setExpenses] = useState<(AmountRow & { category_id: string })[]>([]);
+  const [expenses, setExpenses] = useState<
+    (AmountRow & { category_id: string; paid_from_reserve?: boolean })[]
+  >([]);
 
   useEffect(() => {
     async function load() {
@@ -509,13 +526,15 @@ function BudgetBars({ year, month }: { year: number; month: number }) {
           .not("monthly_budget", "is", null),
         supabase
           .from("expenses")
-          .select("category_id, amount, currency, date")
+          .select("category_id, amount, currency, date, paid_from_reserve")
           .eq("user_id", user.id)
           .gte("date", start)
           .lte("date", end),
       ]);
       setCategories((cats as Category[]) ?? []);
-      setExpenses((exps as (AmountRow & { category_id: string })[]) ?? []);
+      setExpenses(
+        (exps as (AmountRow & { category_id: string; paid_from_reserve?: boolean })[]) ?? [],
+      );
     }
     void load();
   }, [supabase, year, month]);
@@ -525,6 +544,7 @@ function BudgetBars({ year, month }: { year: number; month: number }) {
   const rows = useMemo(() => {
     const spentMap = new Map<string, number>();
     for (const e of expenses) {
+      if (e.paid_from_reserve) continue;
       const value = convertAmount(e.amount, e.currency ?? mainCurrency, mainCurrency, e.date, rates);
       if (value === null) continue;
       spentMap.set(e.category_id, (spentMap.get(e.category_id) ?? 0) + value);

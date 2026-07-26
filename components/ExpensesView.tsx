@@ -180,6 +180,11 @@ export function ExpensesView() {
         r.projects ? (
           <span className="whitespace-nowrap">
             {r.projects.emoji} {r.projects.name}
+            {r.paid_from_reserve ? (
+              <span className="ml-1.5 rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-400">
+                reserva
+              </span>
+            ) : null}
           </span>
         ) : (
           <span className="text-[var(--fg-muted)]">—</span>
@@ -363,6 +368,7 @@ export function ExpensesView() {
                     <p className="text-xs text-[var(--fg-muted)]">
                       {formatDateBR(exp.date)} · {PAYMENT_METHOD_LABELS[exp.payment_method]}
                       {exp.projects ? ` · ${exp.projects.emoji} ${exp.projects.name}` : ""}
+                      {exp.paid_from_reserve ? " · reserva" : ""}
                     </p>
                   </div>
                   <Amount

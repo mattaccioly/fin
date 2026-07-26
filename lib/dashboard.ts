@@ -36,6 +36,11 @@ export type MonthSummary = {
  * Credit expenses count for category tracking only — the manual card bill is the
  * real cash outflow, so credit-method expenses are excluded from `outflows` to
  * avoid double counting.
+ *
+ * Expenses paid from a project's reserve (`paid_from_reserve`) are fully off-books
+ * for the month: they already left the spendable pool when the investment was
+ * recorded, so they are excluded from outflows, category totals, and balance.
+ * Investments themselves reduce `balance` (money set aside).
  */
 export function summarizeMonth(params: {
   year: number;
@@ -64,15 +69,16 @@ export function summarizeMonth(params: {
     rates,
   } = params;
 
+  const trackedExpenses = expenses.filter((e) => !e.paid_from_reserve);
   const incomeTotal = sumConverted(incomes, mainCurrency, rates);
   const teaching = sumConverted(
     incomes.filter((i) => i.source === "teaching"),
     mainCurrency,
     rates,
   );
-  const variable = sumConverted(expenses, mainCurrency, rates);
+  const variable = sumConverted(trackedExpenses, mainCurrency, rates);
   const cashVariable = sumConverted(
-    expenses.filter((e) => e.payment_method !== "credit"),
+    trackedExpenses.filter((e) => e.payment_method !== "credit"),
     mainCurrency,
     rates,
   );
@@ -87,7 +93,7 @@ export function summarizeMonth(params: {
 
   const catMap = new Map(categories.map((c) => [c.id, c]));
   const totals = new Map<string, number>();
-  for (const e of expenses) {
+  for (const e of trackedExpenses) {
     const value = convertAmount(e.amount, e.currency, mainCurrency, e.date, rates);
     if (value === null) continue;
     totals.set(e.category_id, (totals.get(e.category_id) ?? 0) + value);
@@ -108,7 +114,7 @@ export function summarizeMonth(params: {
     invested: investedTotal.total,
     committed,
     outflows,
-    balance: incomeTotal.total - outflows,
+    balance: incomeTotal.total - outflows - investedTotal.total,
     byCategory,
     missingRates: incomeTotal.missing + variable.missing + investedTotal.missing,
   };

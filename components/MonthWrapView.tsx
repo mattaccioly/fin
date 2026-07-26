@@ -212,6 +212,7 @@ export function MonthWrapView() {
     if (!data) return [];
     const spentMap = new Map<string, number>();
     for (const e of data.expenses) {
+      if (e.paid_from_reserve) continue;
       const value = convertAmount(e.amount, e.currency, mainCurrency, e.date, rates);
       if (value === null) continue;
       spentMap.set(e.category_id, (spentMap.get(e.category_id) ?? 0) + value);
@@ -271,7 +272,7 @@ export function MonthWrapView() {
         <Row label="Saídas" value={format(summary.outflows)} />
         <Row label="Investido" value={format(summary.invested)} />
         <Row
-          label="Saldo"
+          label="Saldo (após reservas)"
           value={format(summary.balance)}
           accent={summary.balance >= 0 ? "good" : "bad"}
         />

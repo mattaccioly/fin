@@ -62,6 +62,7 @@ export type Expense = {
   description: string | null;
   payment_method: PaymentMethod;
   project_id: string | null;
+  paid_from_reserve: boolean;
   created_at: string;
   updated_at: string;
   categories?: Pick<Category, "id" | "name" | "icon" | "color"> | null;
